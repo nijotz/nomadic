@@ -22,6 +22,7 @@
     instructionFormat = %s [%an]
 [core]
     editor = vim
+    excludesFile = ~/.config/git/ignore
 [init]
 	defaultBranch = main
 [pull]
