@@ -7,6 +7,8 @@ git clone git@github.com:nijotz/nomad.git ~/.nomad
 
 TODO
 ----
+* tmux-url-select defaults to xcopy. configure.
+* Configure uncommitted changes warning
 * Configure iterm2 to store/load config in dotfiles
 * Subcommands
 * Colors
