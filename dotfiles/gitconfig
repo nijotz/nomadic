@@ -22,7 +22,7 @@
 [rebase]
     instructionFormat = %s [%an]
 [core]
-    editor = vim
+    editor = nvim
     excludesFile = ~/.config/git/ignore
 [init]
     defaultBranch = main
