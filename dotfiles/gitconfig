@@ -12,6 +12,7 @@
     lg  = log --pretty=format:'%C(yellow)%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(cyan)<%an>%Creset' --abbrev-commit --date=relative --graph
     lgd = log --pretty=format:'%C(yellow)%h%C(reset) - %C(green)%cd %C(reset)%s %C(cyan)<%an>%C(yellow)%d%C(reset)' --abbrev-commit --graph --date=format:'%Y-%m-%d %a %H:%M'
     aliases = !git config --get-regexp 'alias.*' | colrm 1 6 | sed 's/[ ]/ = /' | sort
+    branches = "!{ echo \"---|---|---\"; git for-each-ref --format=\"%(refname:short)|%(ahead-behind:main)\" refs/heads/ | sed \"s/ /|/\"; } | column -t -s\"|\" -N \"branch,ahead,behind\""
 [push]
     default = current
 [status]
@@ -24,6 +25,6 @@
     editor = vim
     excludesFile = ~/.config/git/ignore
 [init]
-	defaultBranch = main
+    defaultBranch = main
 [pull]
-	ff = only
+    ff = only
