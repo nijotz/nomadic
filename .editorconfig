@@ -1,11 +1,14 @@
-[*.sh]
+[*]
 indent_style = space
 indent_size = 2
-tab_width = 2
-space_redirects = true
 
-[[bash]]
-indent_style = space
-indent_size = 2
-tab_width = 2
-space_redirects = true
+# shfmt options for shell scripts (including extensionless files like 'nomad')
+[*.{bash,sh}]
+shell_variant = bash
+binary_next_line = true
+switch_case_indent = true
+
+[nomad]
+shell_variant = bash
+binary_next_line = true
+switch_case_indent = true
