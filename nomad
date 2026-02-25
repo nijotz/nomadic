@@ -378,6 +378,98 @@ check_cmd() {
   return 1
 }
 
+# --- Module Execution -------------------------------------------------------
+
+# Source a module's setup script if present.
+# Setup scripts run in the current shell so they can modify the environment
+# (e.g., install homebrew and update PATH).
+run_setup() {
+  local config_dir="$1"
+  local mod="$2"
+  local setup_file="$config_dir/modules/$mod/setup"
+
+  if [[ ! -f "$setup_file" ]]; then
+    return 0
+  fi
+
+  log "Running setup for $mod"
+  . "$setup_file"
+}
+
+# Process a module's links file, creating symlinks.
+# Each line in the links file: <source> <target>
+#   source - relative to the module directory
+#   target - absolute path, ~ expanded to $HOME
+# Existing correct symlinks are skipped. Existing non-symlink targets
+# are warned about and skipped.
+process_links() {
+  local config_dir="$1"
+  local mod="$2"
+  local links_file="$config_dir/modules/$mod/links"
+
+  if [[ ! -f "$links_file" ]]; then
+    return 0
+  fi
+
+  local module_dir="$config_dir/modules/$mod"
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="$(trim_comment "$line")"
+    line="$(trim "$line")"
+    [[ -z "$line" ]] && continue
+
+    local src tgt
+    read -r src tgt <<<"$line"
+
+    # Resolve source to absolute path
+    src="$module_dir/$src"
+
+    # Expand ~ in target
+    tgt="${tgt/#\~/$HOME}"
+
+    # Create parent directory if needed
+    mkdir -p "$(dirname "$tgt")"
+
+    # Check existing target
+    if [[ -e "$tgt" ]] || [[ -L "$tgt" ]]; then
+      if [[ -L "$tgt" ]] && [[ "$(readlink "$tgt")" == "$src" ]]; then
+        log "$mod: $tgt already linked"
+        continue
+      fi
+      warn "$mod: $tgt already exists, skipping"
+      continue
+    fi
+
+    ln -s "$src" "$tgt"
+    log "$mod: linked $tgt -> $src"
+  done <"$links_file"
+}
+
+# Collect shell config for a module. Outputs the config content to stdout.
+# Non-executable files are concatenated verbatim. Executable files are
+# run and their stdout is captured (they inherit the current environment,
+# so prior modules' exports are visible).
+collect_shell_config() {
+  local config_dir="$1"
+  local mod="$2"
+  local shell="$3"
+  local config_file="$config_dir/modules/$mod/$shell"
+
+  if [[ ! -f "$config_file" ]]; then
+    return 0
+  fi
+
+  echo "# --- module: $mod ---"
+
+  if [[ -x "$config_file" ]]; then
+    "$config_file"
+  else
+    cat "$config_file"
+  fi
+
+  echo ""
+}
+
 # --- Init Command ------------------------------------------------------------
 
 cmd_init() {
