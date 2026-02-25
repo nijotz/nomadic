@@ -311,6 +311,73 @@ toposort() {
   printf '%s\n' "${result[@]}"
 }
 
+# --- Module Filtering -------------------------------------------------------
+
+# Filter a list of module names by OS compatibility.
+# Reads _mod_os[] from globals (populated by load_module_deps).
+# Modules with no os: constraint pass on any OS. "linux" in a module's
+# os: field matches ubuntu, arch, debian, etc.
+filter_by_os() {
+  local os_name="$1"
+  shift
+
+  local mod
+  for mod in "$@"; do
+    local idx
+    if ! idx="$(index_of "$mod" "${_modules[@]}")"; then
+      continue
+    fi
+
+    local mod_os="${_mod_os[$idx]}"
+
+    # No OS constraint — passes on any OS
+    if [[ -z "$mod_os" ]]; then
+      echo "$mod"
+      continue
+    fi
+
+    # Check if current OS matches any listed OS
+    local os_item
+    for os_item in $mod_os; do
+      if [[ "$os_item" == "$os_name" ]]; then
+        echo "$mod"
+        continue 2
+      fi
+      # "linux" is a catch-all that matches any Linux distro
+      if [[ "$os_item" == "linux" ]]; then
+        case "$os_name" in
+          ubuntu | arch | debian | manjaro | linux)
+            echo "$mod"
+            continue 3
+            ;;
+        esac
+      fi
+    done
+  done
+}
+
+# Check if a module's cmd: requirement is satisfied.
+# Returns 0 if no requirement or command exists, 1 if missing.
+check_cmd() {
+  local mod="$1"
+  local idx
+  if ! idx="$(index_of "$mod" "${_modules[@]}")"; then
+    return 0
+  fi
+
+  local cmd="${_mod_cmd[$idx]}"
+  if [[ -z "$cmd" ]]; then
+    return 0
+  fi
+
+  if command -v "$cmd" &>/dev/null; then
+    return 0
+  fi
+
+  warn "Module '$mod' requires command '$cmd' which is not installed (skipping)"
+  return 1
+}
+
 # --- Init Command ------------------------------------------------------------
 
 cmd_init() {
