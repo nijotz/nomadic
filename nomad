@@ -760,7 +760,7 @@ cmd_apply() {
   mkdir -p "$NOMAD_STATE_DIR/state"
   printf '%s\n' "$(cd "$config_dir" && pwd)" >"$NOMAD_STATE_DIR/state/config-path"
 
-  log "Done! Restart your shell or run: source $NOMAD_STATE_DIR/config.bash"
+  log "Done! To pick up changes: exec bash  (or restart your shell)"
 }
 
 cmd_profile() {
