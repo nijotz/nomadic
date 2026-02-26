@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --- Constants ---------------------------------------------------------------
+# --- Constants / Globals ------------------------------------------------------
 
 NOMAD_VERSION="0.1.0"
 NOMAD_STATE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/nomad"
 
-# --- Utility Functions -------------------------------------------------------
+# Global parallel arrays, populated by load_module_deps. All share the same
+# index. Use parallel indexed arrays instead of associative arrays for bash 3.2
+# compatibility, which is the macOS default.
+_mod_name=()
+_mod_after=()
+_mod_pkg=()
+_mod_cmd=()
+_mod_os=()
+
+# --- Utility Functions --------------------------------------------------------
 
 log() {
   echo "[nomad] $*" >&2
@@ -40,7 +49,25 @@ trim_comment() {
   echo "$s"
 }
 
-# --- OS Detection ------------------------------------------------------------
+# Find the index of a value in an array. Bash has no built-in for this,
+# so we do a linear scan. Returns the 0-based index via stdout, or
+# returns 1 if not found.
+# Usage: index_of "needle" "${haystack[@]}"
+index_of() {
+  local needle="$1"
+  shift
+  local i=0
+  for item in "$@"; do
+    if [[ "$item" == "$needle" ]]; then
+      echo "$i"
+      return 0
+    fi
+    ((i += 1))
+  done
+  return 1
+}
+
+# --- OS Detection -------------------------------------------------------------
 
 detect_os() {
   local uname
@@ -134,23 +161,162 @@ load_module_deps() {
   done
 }
 
-# --- Topological Sort --------------------------------------------------------
-
-# Lookup index of a module name in the modules array.
-# Returns the index via stdout, or returns 1 if not found.
-index_of() {
-  local needle="$1"
+# Filter a list of module names by OS compatibility.
+# Reads _mod_os[] from globals (populated by load_module_deps).
+# Modules with no os: constraint pass on any OS. "linux" in a module's
+# os: field matches ubuntu, arch, debian, etc.
+filter_by_os() {
+  local os_name="$1"
   shift
-  local i=0
-  for item in "$@"; do
-    if [[ "$item" == "$needle" ]]; then
-      echo "$i"
-      return 0
+
+  local mod
+  for mod in "$@"; do
+    local idx
+    if ! idx="$(index_of "$mod" "${_mod_name[@]}")"; then
+      continue
     fi
-    i=$((i + 1))
+
+    local mod_os="${_mod_os[$idx]}"
+
+    # No OS constraint - passes on any OS
+    if [[ -z "$mod_os" ]]; then
+      echo "$mod"
+      continue
+    fi
+
+    # Check if current OS matches any listed OS
+    local os_item
+    for os_item in $mod_os; do
+      if [[ "$os_item" == "$os_name" ]]; then
+        echo "$mod"
+        continue 2
+      fi
+      # "linux" is a catch-all that matches any Linux distro
+      if [[ "$os_item" == "linux" ]]; then
+        case "$os_name" in
+          ubuntu | arch | debian | manjaro | linux)
+            echo "$mod"
+            continue 3
+            ;;
+        esac
+      fi
+    done
   done
+}
+
+# Check if a module's cmd: requirement is satisfied.
+# Returns 0 if no requirement or command exists, 1 if missing.
+check_cmd() {
+  local mod="$1"
+  local idx
+  if ! idx="$(index_of "$mod" "${_mod_name[@]}")"; then
+    return 0
+  fi
+
+  local cmd="${_mod_cmd[$idx]}"
+  if [[ -z "$cmd" ]]; then
+    return 0
+  fi
+
+  if command -v "$cmd" &>/dev/null; then
+    return 0
+  fi
+
+  warn "Module '$mod' requires command '$cmd' which is not installed (skipping)"
   return 1
 }
+
+# Source a module's setup script if present.
+# Setup scripts run in the current shell so they can modify the environment
+# (e.g., install homebrew and update PATH).
+run_setup() {
+  local config_dir="$1"
+  local mod="$2"
+  local setup_file="$config_dir/modules/$mod/setup"
+
+  if [[ ! -f "$setup_file" ]]; then
+    return 0
+  fi
+
+  log "Running setup for $mod"
+  . "$setup_file"
+}
+
+# Process a module's links file, creating symlinks.
+# Each line in the links file: <source> <target>
+#   source - relative to the module directory
+#   target - absolute path, ~ expanded to $HOME
+# Existing correct symlinks are skipped. Existing non-symlink targets
+# are warned about and skipped.
+process_links() {
+  local config_dir="$1"
+  local mod="$2"
+  local links_file="$config_dir/modules/$mod/links"
+
+  if [[ ! -f "$links_file" ]]; then
+    return 0
+  fi
+
+  local module_dir="$config_dir/modules/$mod"
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="$(trim_comment "$line")"
+    line="$(trim "$line")"
+    [[ -z "$line" ]] && continue
+
+    local src tgt
+    read -r src tgt <<<"$line"
+
+    # Resolve source to absolute path
+    src="$module_dir/$src"
+
+    # Expand ~ in target
+    tgt="${tgt/#\~/$HOME}"
+
+    # Create parent directory if needed
+    mkdir -p "$(dirname "$tgt")"
+
+    # Check existing target
+    if [[ -e "$tgt" ]] || [[ -L "$tgt" ]]; then
+      if [[ -L "$tgt" ]] && [[ "$(readlink "$tgt")" == "$src" ]]; then
+        log "$mod: $tgt already linked"
+        continue
+      fi
+      warn "$mod: $tgt already exists, skipping"
+      continue
+    fi
+
+    ln -s "$src" "$tgt"
+    log "$mod: linked $tgt -> $src"
+  done <"$links_file"
+}
+
+# Collect shell config for a module. Outputs the config content to stdout.
+# Non-executable files are concatenated verbatim. Executable files are
+# run and their stdout is captured (they inherit the current environment,
+# so prior modules' exports are visible).
+collect_shell_config() {
+  local config_dir="$1"
+  local mod="$2"
+  local shell="$3"
+  local config_file="$config_dir/modules/$mod/$shell"
+
+  if [[ ! -f "$config_file" ]]; then
+    return 0
+  fi
+
+  echo "# --- module: $mod ---"
+
+  if [[ -x "$config_file" ]]; then
+    "$config_file"
+  else
+    cat "$config_file"
+  fi
+
+  echo ""
+}
+
+# --- Topological Sort ---------------------------------------------------------
 
 # Topological sort using Kahn's algorithm (BFS-based).
 #
@@ -165,10 +331,6 @@ index_of() {
 # Unknown dependencies (e.g. "after: homebrew" when homebrew isn't in the
 # module list) are warned about and skipped - this keeps configs portable
 # across machines where some modules may not exist.
-#
-# Uses parallel indexed arrays instead of associative arrays for bash 3.2
-# compatibility (macOS default). index_of does linear lookups, which
-# is fine for the expected scale (<50 modules).
 toposort() {
   local count=${#_mod_name[@]}
 
@@ -176,7 +338,8 @@ toposort() {
     return 0
   fi
 
-  # Build parallel arrays for the graph:
+  # Build parallel arrays for the graph. Ideally these would be associative
+  # arrays keyed by module name, but bash 3.2 only supports integer indices.
   #   indegree[i] = number of unresolved dependencies for _mod_name[i]
   #   edges[i]    = space-separated names of modules that depend on _mod_name[i]
   local -a indegree=()
@@ -273,166 +436,7 @@ toposort() {
   printf '%s\n' "${result[@]}"
 }
 
-# --- Module Filtering -------------------------------------------------------
-
-# Filter a list of module names by OS compatibility.
-# Reads _mod_os[] from globals (populated by load_module_deps).
-# Modules with no os: constraint pass on any OS. "linux" in a module's
-# os: field matches ubuntu, arch, debian, etc.
-filter_by_os() {
-  local os_name="$1"
-  shift
-
-  local mod
-  for mod in "$@"; do
-    local idx
-    if ! idx="$(index_of "$mod" "${_mod_name[@]}")"; then
-      continue
-    fi
-
-    local mod_os="${_mod_os[$idx]}"
-
-    # No OS constraint - passes on any OS
-    if [[ -z "$mod_os" ]]; then
-      echo "$mod"
-      continue
-    fi
-
-    # Check if current OS matches any listed OS
-    local os_item
-    for os_item in $mod_os; do
-      if [[ "$os_item" == "$os_name" ]]; then
-        echo "$mod"
-        continue 2
-      fi
-      # "linux" is a catch-all that matches any Linux distro
-      if [[ "$os_item" == "linux" ]]; then
-        case "$os_name" in
-          ubuntu | arch | debian | manjaro | linux)
-            echo "$mod"
-            continue 3
-            ;;
-        esac
-      fi
-    done
-  done
-}
-
-# Check if a module's cmd: requirement is satisfied.
-# Returns 0 if no requirement or command exists, 1 if missing.
-check_cmd() {
-  local mod="$1"
-  local idx
-  if ! idx="$(index_of "$mod" "${_mod_name[@]}")"; then
-    return 0
-  fi
-
-  local cmd="${_mod_cmd[$idx]}"
-  if [[ -z "$cmd" ]]; then
-    return 0
-  fi
-
-  if command -v "$cmd" &>/dev/null; then
-    return 0
-  fi
-
-  warn "Module '$mod' requires command '$cmd' which is not installed (skipping)"
-  return 1
-}
-
-# --- Module Execution -------------------------------------------------------
-
-# Source a module's setup script if present.
-# Setup scripts run in the current shell so they can modify the environment
-# (e.g., install homebrew and update PATH).
-run_setup() {
-  local config_dir="$1"
-  local mod="$2"
-  local setup_file="$config_dir/modules/$mod/setup"
-
-  if [[ ! -f "$setup_file" ]]; then
-    return 0
-  fi
-
-  log "Running setup for $mod"
-  . "$setup_file"
-}
-
-# Process a module's links file, creating symlinks.
-# Each line in the links file: <source> <target>
-#   source - relative to the module directory
-#   target - absolute path, ~ expanded to $HOME
-# Existing correct symlinks are skipped. Existing non-symlink targets
-# are warned about and skipped.
-process_links() {
-  local config_dir="$1"
-  local mod="$2"
-  local links_file="$config_dir/modules/$mod/links"
-
-  if [[ ! -f "$links_file" ]]; then
-    return 0
-  fi
-
-  local module_dir="$config_dir/modules/$mod"
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="$(trim_comment "$line")"
-    line="$(trim "$line")"
-    [[ -z "$line" ]] && continue
-
-    local src tgt
-    read -r src tgt <<<"$line"
-
-    # Resolve source to absolute path
-    src="$module_dir/$src"
-
-    # Expand ~ in target
-    tgt="${tgt/#\~/$HOME}"
-
-    # Create parent directory if needed
-    mkdir -p "$(dirname "$tgt")"
-
-    # Check existing target
-    if [[ -e "$tgt" ]] || [[ -L "$tgt" ]]; then
-      if [[ -L "$tgt" ]] && [[ "$(readlink "$tgt")" == "$src" ]]; then
-        log "$mod: $tgt already linked"
-        continue
-      fi
-      warn "$mod: $tgt already exists, skipping"
-      continue
-    fi
-
-    ln -s "$src" "$tgt"
-    log "$mod: linked $tgt -> $src"
-  done <"$links_file"
-}
-
-# Collect shell config for a module. Outputs the config content to stdout.
-# Non-executable files are concatenated verbatim. Executable files are
-# run and their stdout is captured (they inherit the current environment,
-# so prior modules' exports are visible).
-collect_shell_config() {
-  local config_dir="$1"
-  local mod="$2"
-  local shell="$3"
-  local config_file="$config_dir/modules/$mod/$shell"
-
-  if [[ ! -f "$config_file" ]]; then
-    return 0
-  fi
-
-  echo "# --- module: $mod ---"
-
-  if [[ -x "$config_file" ]]; then
-    "$config_file"
-  else
-    cat "$config_file"
-  fi
-
-  echo ""
-}
-
-# --- RC File Management ----------------------------------------------------
+# --- RC File Management -------------------------------------------------------
 
 # Write accumulated shell config content to the RC file.
 # Reads content from stdin. Creates the state directory if needed.
@@ -473,7 +477,7 @@ infect_rc() {
   echo "$source_line" >>"$rc_file"
 }
 
-# --- Init Command ------------------------------------------------------------
+# --- Init ---------------------------------------------------------------------
 
 cmd_init() {
   local target="${1:-.}"
@@ -522,7 +526,7 @@ SHELL
   log "Edit profiles/default to choose which modules to enable"
 }
 
-# --- Stub Commands -----------------------------------------------------------
+# --- Apply --------------------------------------------------------------------
 
 cmd_apply() {
   local config_dir="${1:-}"
@@ -638,7 +642,7 @@ cmd_doctor() {
   error "doctor is not yet implemented"
 }
 
-# --- Help & Version ----------------------------------------------------------
+# --- Help & Version -----------------------------------------------------------
 
 usage() {
   cat <<'USAGE'
@@ -664,7 +668,7 @@ version() {
   echo "nomad $NOMAD_VERSION"
 }
 
-# --- Main Dispatch -----------------------------------------------------------
+# --- Main ---------------------------------------------------------------------
 
 main() {
   local cmd="${1:-}"
@@ -688,3 +692,5 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   main "$@"
 fi
+
+# --- Thank You Call Again -----------------------------------------------------
