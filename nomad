@@ -687,7 +687,7 @@ cmd_apply() {
   rc_bash="$(mktemp)"
   rc_fish="$(mktemp)"
   rc_zsh="$(mktemp)"
-  trap 'rm -f "$rc_bash" "$rc_fish" "$rc_zsh"' EXIT
+  trap 'rm -f "${rc_bash:-}" "${rc_fish:-}" "${rc_zsh:-}"' EXIT
 
   # Process each module in dependency order
   for mod in "${filtered[@]}"; do
