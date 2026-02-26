@@ -589,7 +589,7 @@ install_packages() {
 # --- Init ---------------------------------------------------------------------
 
 cmd_init() {
-  local target="${1:-.}"
+  local target="${1:-$HOME/.nomad}"
 
   if [[ -d "$target/modules" ]]; then
     error "Config directory already exists at $target/modules"
@@ -646,7 +646,7 @@ cmd_apply() {
     if [[ -f "$remembered" ]]; then
       config_dir="$(cat "$remembered")"
     else
-      config_dir="."
+      config_dir="$HOME/.nomad"
     fi
   fi
 
