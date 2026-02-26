@@ -91,41 +91,6 @@ discover_modules() {
 
 # --- Deps File Parsing -------------------------------------------------------
 
-parse_deps() {
-  local deps_file="$1"
-
-  if [[ ! -f "$deps_file" ]]; then
-    return 0
-  fi
-
-  local after="" pkg="" cmd="" os=""
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="$(trim_comment "$line")"
-    line="$(trim "$line")"
-
-    [[ -z "$line" ]] && continue
-
-    case "$line" in
-      after:*) after="$(trim "${line#after:}")" ;;
-      pkg:*) pkg="$(trim "${line#pkg:}")" ;;
-      cmd:*) cmd="$(trim "${line#cmd:}")" ;;
-      os:*) os="$(trim "${line#os:}")" ;;
-      *)
-        warn "Unknown directive in $deps_file: $line"
-        ;;
-    esac
-  done <"$deps_file"
-
-  # Output as KEY=VALUE text protocol. Bash 3.2 (macOS default) lacks
-  # associative arrays and namerefs, so we use simple text that gets
-  # parsed with IFS='=' read.
-  if [[ -n "$after" ]]; then echo "AFTER=$after"; fi
-  if [[ -n "$pkg" ]]; then echo "PKG=$pkg"; fi
-  if [[ -n "$cmd" ]]; then echo "CMD=$cmd"; fi
-  if [[ -n "$os" ]]; then echo "OS=$os"; fi
-}
-
 # Parse all module deps files once and populate global parallel arrays.
 # After calling this, the following arrays are set (indexed same as _modules):
 #   _modules[i] = module name
@@ -138,7 +103,6 @@ parse_deps() {
 load_module_deps() {
   local config_dir="$1"
   shift
-  # Remaining args are module names
 
   _modules=("$@")
   _mod_after=()
@@ -152,17 +116,19 @@ load_module_deps() {
     local after="" pkg="" cmd="" os=""
 
     if [[ -f "$deps_file" ]]; then
-      local parsed
-      parsed="$(parse_deps "$deps_file")"
-      local k v
-      while IFS='=' read -r k v; do
-        case "$k" in
-          AFTER) after="$v" ;;
-          PKG) pkg="$v" ;;
-          CMD) cmd="$v" ;;
-          OS) os="$v" ;;
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        line="$(trim_comment "$line")"
+        line="$(trim "$line")"
+        [[ -z "$line" ]] && continue
+
+        case "$line" in
+          after:*) after="$(trim "${line#after:}")" ;;
+          pkg:*) pkg="$(trim "${line#pkg:}")" ;;
+          cmd:*) cmd="$(trim "${line#cmd:}")" ;;
+          os:*) os="$(trim "${line#os:}")" ;;
+          *) warn "Unknown directive in $deps_file: $line" ;;
         esac
-      done <<<"$parsed"
+      done <"$deps_file"
     fi
 
     _mod_after+=("$after")
