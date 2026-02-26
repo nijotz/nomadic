@@ -563,7 +563,97 @@ SHELL
 # --- Stub Commands -----------------------------------------------------------
 
 cmd_apply() {
-  error "apply is not yet implemented"
+  local config_dir="${1:-}"
+
+  # Resolve config directory: explicit arg → remembered path → current dir
+  if [[ -z "$config_dir" ]]; then
+    local remembered="$NOMAD_STATE_DIR/state/config-path"
+    if [[ -f "$remembered" ]]; then
+      config_dir="$(cat "$remembered")"
+    else
+      config_dir="."
+    fi
+  fi
+
+  if [[ ! -d "$config_dir/modules" ]]; then
+    error "No modules directory at $config_dir/modules"
+  fi
+
+  log "Applying config from $config_dir"
+
+  # Discover all modules
+  local -a all_modules=()
+  while IFS= read -r mod; do
+    all_modules+=("$mod")
+  done < <(discover_modules "$config_dir")
+
+  if ((${#all_modules[@]} == 0)); then
+    log "No modules found"
+    return 0
+  fi
+
+  # Load deps and sort
+  load_module_deps "$config_dir" "${all_modules[@]}"
+  local -a ordered=()
+  while IFS= read -r mod; do
+    ordered+=("$mod")
+  done < <(toposort)
+
+  # Filter by OS
+  local current_os
+  current_os="$(detect_os)"
+  local -a filtered=()
+  while IFS= read -r mod; do
+    [[ -n "$mod" ]] && filtered+=("$mod")
+  done < <(filter_by_os "$current_os" "${ordered[@]}")
+
+  # Temp files for accumulating shell config
+  local rc_bash rc_fish rc_zsh
+  rc_bash="$(mktemp)"
+  rc_fish="$(mktemp)"
+  rc_zsh="$(mktemp)"
+  trap 'rm -f "$rc_bash" "$rc_fish" "$rc_zsh"' EXIT
+
+  # Process each module in dependency order
+  for mod in "${filtered[@]}"; do
+    if ! check_cmd "$mod"; then
+      continue
+    fi
+
+    log "Applying module: $mod"
+
+    run_setup "$config_dir" "$mod"
+    process_links "$config_dir" "$mod"
+
+    collect_shell_config "$config_dir" "$mod" "bash" >>"$rc_bash"
+    collect_shell_config "$config_dir" "$mod" "fish" >>"$rc_fish"
+    collect_shell_config "$config_dir" "$mod" "zsh" >>"$rc_zsh"
+
+    # Source accumulated bash config so later modules see prior exports
+    if [[ -s "$rc_bash" ]]; then
+      . "$rc_bash"
+    fi
+  done
+
+  # Generate rc files for shells that have content
+  if [[ -s "$rc_bash" ]]; then
+    generate_rc "bash" <"$rc_bash"
+    infect_rc "bash"
+  fi
+  if [[ -s "$rc_fish" ]]; then
+    generate_rc "fish" <"$rc_fish"
+    infect_rc "fish"
+  fi
+  if [[ -s "$rc_zsh" ]]; then
+    generate_rc "zsh" <"$rc_zsh"
+    infect_rc "zsh"
+  fi
+
+  # Remember config path for next time
+  mkdir -p "$NOMAD_STATE_DIR/state"
+  printf '%s\n' "$(cd "$config_dir" && pwd)" >"$NOMAD_STATE_DIR/state/config-path"
+
+  log "Done! Restart your shell or run: source $NOMAD_STATE_DIR/config.bash"
 }
 
 cmd_profile() {
