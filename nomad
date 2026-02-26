@@ -64,7 +64,7 @@ detect_os() {
   esac
 }
 
-# --- Module Discovery --------------------------------------------------------
+# --- Modules ------------------------------------------------------------------
 
 discover_modules() {
   local config_dir="$1"
@@ -89,22 +89,18 @@ discover_modules() {
   fi
 }
 
-# --- Deps File Parsing -------------------------------------------------------
-
 # Parse all module deps files once and populate global parallel arrays.
-# After calling this, the following arrays are set (indexed same as _modules):
-#   _modules[i] = module name
+# After calling this, the following arrays are set
+#   _mod_name[i]  = module name
 #   _mod_after[i] = "after:" value (space-separated module names)
 #   _mod_pkg[i]   = "pkg:" value (space-separated package names)
 #   _mod_cmd[i]   = "cmd:" value
 #   _mod_os[i]    = "os:" value
-# Each deps file is read exactly once. Later phases (toposort, OS filtering,
-# package collection) all consume these arrays instead of re-reading files.
 load_module_deps() {
   local config_dir="$1"
   shift
 
-  _modules=("$@")
+  _mod_name=("$@")
   _mod_after=()
   _mod_pkg=()
   _mod_cmd=()
@@ -159,7 +155,7 @@ index_of() {
 # Topological sort using Kahn's algorithm (BFS-based).
 #
 # Reads from the global arrays populated by load_module_deps:
-#   _modules[]    — module names
+#   _mod_name[]    — module names
 #   _mod_after[]  — each module's "after:" dependencies
 #
 # Outputs module names in dependency order. Modules with no ordering
@@ -174,15 +170,15 @@ index_of() {
 # compatibility (macOS default). index_of does linear lookups, which
 # is fine for the expected scale (<50 modules).
 toposort() {
-  local count=${#_modules[@]}
+  local count=${#_mod_name[@]}
 
   if ((count == 0)); then
     return 0
   fi
 
   # Build parallel arrays for the graph:
-  #   indegree[i] = number of unresolved dependencies for _modules[i]
-  #   edges[i]    = space-separated names of modules that depend on _modules[i]
+  #   indegree[i] = number of unresolved dependencies for _mod_name[i]
+  #   edges[i]    = space-separated names of modules that depend on _mod_name[i]
   local -a indegree=()
   local -a edges=()
   local i
@@ -199,13 +195,13 @@ toposort() {
     if [[ -n "$after" ]]; then
       for dep in $after; do
         local dep_idx
-        if dep_idx="$(index_of "$dep" "${_modules[@]}")"; then
+        if dep_idx="$(index_of "$dep" "${_mod_name[@]}")"; then
           # Add this module as a successor of dep
-          edges[$dep_idx]="${edges[$dep_idx]:+${edges[$dep_idx]} }${_modules[$i]}"
+          edges[$dep_idx]="${edges[$dep_idx]:+${edges[$dep_idx]} }${_mod_name[$i]}"
           # This module has one more incoming edge
           indegree[$i]=$((${indegree[$i]} + 1))
         else
-          warn "Module '${_modules[$i]}' depends on unknown module '$dep' (skipping dependency)"
+          warn "Module '${_mod_name[$i]}' depends on unknown module '$dep' (skipping dependency)"
         fi
       done
     fi
@@ -216,7 +212,7 @@ toposort() {
   local -a queue=()
   for ((i = 0; i < count; i++)); do
     if ((${indegree[$i]} == 0)); then
-      queue+=("${_modules[$i]}")
+      queue+=("${_mod_name[$i]}")
     fi
   done
   local sorted_queue
@@ -237,14 +233,14 @@ toposort() {
     result+=("$current")
 
     local cur_idx
-    cur_idx="$(index_of "$current" "${_modules[@]}")"
+    cur_idx="$(index_of "$current" "${_mod_name[@]}")"
 
     # For each module that depends on current, decrement its in-degree
     local -a newly_free=()
     if [[ -n "${edges[$cur_idx]}" ]]; then
       for successor in ${edges[$cur_idx]}; do
         local succ_idx
-        succ_idx="$(index_of "$successor" "${_modules[@]}")"
+        succ_idx="$(index_of "$successor" "${_mod_name[@]}")"
         indegree[$succ_idx]=$((${indegree[$succ_idx]} - 1))
         if ((${indegree[$succ_idx]} == 0)); then
           newly_free+=("$successor")
@@ -268,7 +264,7 @@ toposort() {
     warn "Dependency cycle detected among modules:"
     for ((i = 0; i < count; i++)); do
       if ((${indegree[$i]} > 0)); then
-        warn "  ${_modules[$i]} (blocked)"
+        warn "  ${_mod_name[$i]} (blocked)"
       fi
     done
     return 1
@@ -290,7 +286,7 @@ filter_by_os() {
   local mod
   for mod in "$@"; do
     local idx
-    if ! idx="$(index_of "$mod" "${_modules[@]}")"; then
+    if ! idx="$(index_of "$mod" "${_mod_name[@]}")"; then
       continue
     fi
 
@@ -327,7 +323,7 @@ filter_by_os() {
 check_cmd() {
   local mod="$1"
   local idx
-  if ! idx="$(index_of "$mod" "${_modules[@]}")"; then
+  if ! idx="$(index_of "$mod" "${_mod_name[@]}")"; then
     return 0
   fi
 
