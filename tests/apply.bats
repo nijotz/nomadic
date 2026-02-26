@@ -106,6 +106,16 @@ teardown() {
   grep -q 'NOMAD_MANAGED' "$HOME/.bashrc"
 }
 
+@test "apply: exits cleanly without unbound variable errors" {
+  create_module "mymod"
+  printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
+
+  run env HOME="$HOME" NOMAD_STATE_DIR="$NOMAD_STATE_DIR" \
+    "$NOMAD_ROOT/nomad" apply "$TEST_CONFIG"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unbound variable"* ]]
+}
+
 @test "apply: remembers config path" {
   create_module "mymod"
   printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
