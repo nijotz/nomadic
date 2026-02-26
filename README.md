@@ -89,3 +89,15 @@ Bash 3.2+ (ships with macOS). No other dependencies.
 ```bash
 bats tests/
 ```
+
+To test `nomad apply` without touching your real shell config, run inside a temporary HOME:
+
+```bash
+tmp=$(mktemp -d)
+cp -r ~/.nomad "$tmp/.nomad"
+env HOME="$tmp" bash --norc --noprofile
+# inside the clean shell:
+./nomad apply
+source ~/.config/nomad/config.bash
+# exit when done - everything is throwaway
+```
