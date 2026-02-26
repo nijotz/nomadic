@@ -71,7 +71,7 @@ load test_helper/common
 }
 
 @test "handles empty input" {
-  _modules=()
+  _mod_name=()
   _mod_after=()
   result="$(toposort)"
   [ -z "$result" ]
