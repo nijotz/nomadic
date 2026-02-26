@@ -41,9 +41,8 @@ load test_helper/common
   [[ "$output" == *"already exists"* ]]
 }
 
-@test "init defaults to current directory" {
-  cd "$TEST_DIR"
-  cmd_init
-  [ -d "$TEST_DIR/modules" ]
-  [ -d "$TEST_DIR/profiles" ]
+@test "init defaults to ~/.nomad" {
+  HOME="$TEST_DIR" cmd_init
+  [ -d "$TEST_DIR/.nomad/modules" ]
+  [ -d "$TEST_DIR/.nomad/profiles" ]
 }
