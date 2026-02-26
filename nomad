@@ -477,6 +477,115 @@ infect_rc() {
   echo "$source_line" >>"$rc_file"
 }
 
+# --- Package Management ------------------------------------------------------
+
+# Detect which package manager is available.
+# Checks in priority order: brew > apt > pacman.
+# Outputs the name and returns 0, or returns 1 if none found.
+detect_pkg_manager() {
+  local mgr
+  for mgr in brew apt pacman; do
+    if command -v "$mgr" &>/dev/null; then
+      echo "$mgr"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Read a flat package list file (one name per line).
+# Skips blank lines and # comments. Outputs names to stdout.
+read_package_list() {
+  local file="$1"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="$(trim_comment "$line")"
+    line="$(trim "$line")"
+    [[ -z "$line" ]] && continue
+    echo "$line"
+  done <"$file"
+}
+
+# Collect all package names from _mod_pkg[] globals.
+# Splits space-separated values and deduplicates.
+# Outputs one package name per line.
+collect_packages() {
+  local -a seen=()
+  local i
+  for ((i = 0; i < ${#_mod_pkg[@]}; i++)); do
+    local pkgs="${_mod_pkg[$i]}"
+    [[ -z "$pkgs" ]] && continue
+    local pkg
+    for pkg in $pkgs; do
+      local found=0
+      local s
+      for s in "${seen[@]+"${seen[@]}"}"; do
+        if [[ "$s" == "$pkg" ]]; then
+          found=1
+          break
+        fi
+      done
+      if ((found == 0)); then
+        seen+=("$pkg")
+        echo "$pkg"
+      fi
+    done
+  done
+}
+
+# Resolve abstract package names to concrete ones using a map file.
+# Map file format: abstract=concrete (one per line).
+# Unmapped names pass through as-is. Missing map file = all pass-through.
+resolve_packages() {
+  local map_file="$1"
+  shift
+
+  local -a map_from=()
+  local -a map_to=()
+
+  if [[ -f "$map_file" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line="$(trim_comment "$line")"
+      line="$(trim "$line")"
+      [[ -z "$line" ]] && continue
+      local abstract="${line%%=*}"
+      local concrete="${line#*=}"
+      map_from+=("$(trim "$abstract")")
+      map_to+=("$(trim "$concrete")")
+    done <"$map_file"
+  fi
+
+  local name
+  for name in "$@"; do
+    local mapped=0
+    local j
+    for ((j = 0; j < ${#map_from[@]}; j++)); do
+      if [[ "${map_from[$j]}" == "$name" ]]; then
+        echo "${map_to[$j]}"
+        mapped=1
+        break
+      fi
+    done
+    if ((mapped == 0)); then
+      echo "$name"
+    fi
+  done
+}
+
+# Run the install command for the detected package manager.
+install_packages() {
+  local pkg_manager="$1"
+  shift
+
+  log "Installing packages via $pkg_manager: $*"
+
+  case "$pkg_manager" in
+    brew) brew install "$@" ;;
+    apt) sudo apt install -y "$@" ;;
+    pacman) sudo pacman -S --noconfirm "$@" ;;
+    *) error "Unknown package manager: $pkg_manager" ;;
+  esac
+}
+
 # --- Init ---------------------------------------------------------------------
 
 cmd_init() {
@@ -600,6 +709,38 @@ cmd_apply() {
       . "$rc_bash"
     fi
   done
+
+  # Install packages
+  local pkg_manager
+  if pkg_manager="$(detect_pkg_manager)"; then
+    local -a all_pkgs=()
+
+    # Collect module pkg: declarations
+    while IFS= read -r pkg; do
+      [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
+    done < <(collect_packages)
+
+    # Read base package list if packages module exists
+    local pkg_list="$config_dir/modules/packages/packages"
+    if [[ -f "$pkg_list" ]]; then
+      while IFS= read -r pkg; do
+        [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
+      done < <(read_package_list "$pkg_list")
+    fi
+
+    if ((${#all_pkgs[@]} > 0)); then
+      # Resolve through map file
+      local map_file="$config_dir/modules/packages/$pkg_manager.map"
+      local -a resolved=()
+      while IFS= read -r pkg; do
+        [[ -n "$pkg" ]] && resolved+=("$pkg")
+      done < <(resolve_packages "$map_file" "${all_pkgs[@]}")
+
+      install_packages "$pkg_manager" "${resolved[@]}"
+    fi
+  else
+    warn "No package manager found (brew, apt, pacman)"
+  fi
 
   # Generate rc files for shells that have content
   if [[ -s "$rc_bash" ]]; then
