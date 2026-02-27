@@ -682,6 +682,12 @@ cmd_apply() {
     [[ -n "$mod" ]] && filtered+=("$mod")
   done < <(filter_by_os "$current_os" "${ordered[@]}")
 
+  # Detect which shells are installed
+  local has_bash=0 has_fish=0 has_zsh=0
+  command -v bash &>/dev/null && has_bash=1
+  command -v fish &>/dev/null && has_fish=1
+  command -v zsh &>/dev/null && has_zsh=1
+
   # Temp files for accumulating shell config
   local rc_bash rc_fish rc_zsh
   rc_bash="$(mktemp)"
@@ -700,9 +706,9 @@ cmd_apply() {
     run_setup "$config_dir" "$mod"
     process_links "$config_dir" "$mod"
 
-    collect_shell_config "$config_dir" "$mod" "bash" >>"$rc_bash"
-    collect_shell_config "$config_dir" "$mod" "fish" >>"$rc_fish"
-    collect_shell_config "$config_dir" "$mod" "zsh" >>"$rc_zsh"
+    ((has_bash)) && collect_shell_config "$config_dir" "$mod" "bash" >>"$rc_bash"
+    ((has_fish)) && collect_shell_config "$config_dir" "$mod" "fish" >>"$rc_fish"
+    ((has_zsh)) && collect_shell_config "$config_dir" "$mod" "zsh" >>"$rc_zsh"
 
     # Source accumulated bash config so later modules see prior exports
     if [[ -s "$rc_bash" ]]; then
