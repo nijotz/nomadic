@@ -586,6 +586,105 @@ install_packages() {
   esac
 }
 
+# Snapshot installed packages for the detected package manager.
+# Sets global _installed_pkgs (newline-separated list) and _pkg_manager.
+_installed_pkgs=""
+_pkg_manager=""
+
+snapshot_installed_packages() {
+  if ! _pkg_manager="$(detect_pkg_manager)"; then
+    return 0
+  fi
+
+  case "$_pkg_manager" in
+    brew) _installed_pkgs="$(brew list --formula -1 2>/dev/null)" ;;
+    apt) _installed_pkgs="$(dpkg-query -W -f '${Package}\n' 2>/dev/null)" ;;
+    pacman) _installed_pkgs="$(pacman -Qq 2>/dev/null)" ;;
+  esac
+}
+
+# Check if a package is already installed (against the snapshot).
+is_pkg_installed() {
+  local pkg="$1"
+  echo "$_installed_pkgs" | grep -qx "$pkg"
+}
+
+# Install a module's pkg: packages, skipping any already installed.
+install_module_packages() {
+  local config_dir="$1"
+  local mod="$2"
+
+  [[ -z "$_pkg_manager" ]] && return 0
+
+  local idx
+  if ! idx="$(index_of "$mod" "${_mod_name[@]}")"; then
+    return 0
+  fi
+
+  local pkgs="${_mod_pkg[$idx]}"
+  [[ -z "$pkgs" ]] && return 0
+
+  local map_file="$config_dir/modules/packages/$pkg_manager.map"
+  local -a missing=()
+  local pkg
+  for pkg in $pkgs; do
+    local resolved
+    resolved="$(resolve_packages "$map_file" "$pkg")"
+    if ! is_pkg_installed "$resolved"; then
+      missing+=("$resolved")
+    fi
+  done
+
+  if ((${#missing[@]} > 0)); then
+    install_packages "$_pkg_manager" "${missing[@]}"
+    # Update snapshot so subsequent modules see newly installed packages
+    local pkg
+    for pkg in "${missing[@]}"; do
+      _installed_pkgs="${_installed_pkgs}"$'\n'"${pkg}"
+    done
+  fi
+}
+
+# Discover and install all packages from module deps and package lists.
+# Detects the package manager, collects packages, resolves names, and installs.
+install_all_packages() {
+  local config_dir="$1"
+
+  local pkg_manager
+  if ! pkg_manager="$(detect_pkg_manager)"; then
+    warn "No package manager found (brew, apt, pacman)"
+    return 0
+  fi
+
+  local -a all_pkgs=()
+
+  # Collect module pkg: declarations
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
+  done < <(collect_packages)
+
+  # Read base package list if packages module exists
+  local pkg_list="$config_dir/modules/packages/packages"
+  if [[ -f "$pkg_list" ]]; then
+    while IFS= read -r pkg; do
+      [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
+    done < <(read_package_list "$pkg_list")
+  fi
+
+  if ((${#all_pkgs[@]} == 0)); then
+    return 0
+  fi
+
+  # Resolve through map file
+  local map_file="$config_dir/modules/packages/$pkg_manager.map"
+  local -a resolved=()
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] && resolved+=("$pkg")
+  done < <(resolve_packages "$map_file" "${all_pkgs[@]}")
+
+  install_packages "$pkg_manager" "${resolved[@]}"
+}
+
 # --- Init ---------------------------------------------------------------------
 
 cmd_init() {
@@ -688,6 +787,9 @@ cmd_apply() {
   command -v fish &>/dev/null && has_fish=1
   command -v zsh &>/dev/null && has_zsh=1
 
+  # Snapshot installed packages once so per-module installs can check quickly
+  snapshot_installed_packages
+
   # Temp files for accumulating shell config
   local rc_bash rc_fish rc_zsh
   rc_bash="$(mktemp)"
@@ -697,6 +799,9 @@ cmd_apply() {
 
   # Process each module in dependency order
   for mod in "${filtered[@]}"; do
+    # Install module's declared packages before checking cmd availability
+    install_module_packages "$config_dir" "$mod"
+
     if ! check_cmd "$mod"; then
       continue
     fi
@@ -716,38 +821,6 @@ cmd_apply() {
     fi
   done
 
-  # Install packages
-  local pkg_manager
-  if pkg_manager="$(detect_pkg_manager)"; then
-    local -a all_pkgs=()
-
-    # Collect module pkg: declarations
-    while IFS= read -r pkg; do
-      [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
-    done < <(collect_packages)
-
-    # Read base package list if packages module exists
-    local pkg_list="$config_dir/modules/packages/packages"
-    if [[ -f "$pkg_list" ]]; then
-      while IFS= read -r pkg; do
-        [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
-      done < <(read_package_list "$pkg_list")
-    fi
-
-    if ((${#all_pkgs[@]} > 0)); then
-      # Resolve through map file
-      local map_file="$config_dir/modules/packages/$pkg_manager.map"
-      local -a resolved=()
-      while IFS= read -r pkg; do
-        [[ -n "$pkg" ]] && resolved+=("$pkg")
-      done < <(resolve_packages "$map_file" "${all_pkgs[@]}")
-
-      install_packages "$pkg_manager" "${resolved[@]}"
-    fi
-  else
-    warn "No package manager found (brew, apt, pacman)"
-  fi
-
   # Generate rc files for shells that have content
   if [[ -s "$rc_bash" ]]; then
     generate_rc "bash" <"$rc_bash"
@@ -766,7 +839,13 @@ cmd_apply() {
   mkdir -p "$NOMAD_STATE_DIR/state"
   printf '%s\n' "$(cd "$config_dir" && pwd)" >"$NOMAD_STATE_DIR/state/config-path"
 
-  log "Done! To pick up changes: exec bash  (or restart your shell)"
+  log "Shell config applied. To pick up changes: exec bash  (or restart your shell)"
+
+  # Install remaining packages from flat package list (safe to ctrl-c)
+  log "Installing packages..."
+  install_all_packages "$config_dir"
+
+  log "Done!"
 }
 
 cmd_profile() {
