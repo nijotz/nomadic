@@ -112,6 +112,41 @@ EOF
   [ "${lines[2]}" = "curl" ]
 }
 
+@test "is_pkg_installed checks _installed_casks for cask: prefix" {
+  _installed_pkgs=$'git\njq'
+  _installed_casks=$'iterm2\nfirefox'
+
+  run is_pkg_installed "cask:iterm2"
+  [ "$status" -eq 0 ]
+
+  run is_pkg_installed "cask:firefox"
+  [ "$status" -eq 0 ]
+
+  run is_pkg_installed "cask:chrome"
+  [ "$status" -eq 1 ]
+
+  # Regular packages still check _installed_pkgs
+  run is_pkg_installed "git"
+  [ "$status" -eq 0 ]
+
+  run is_pkg_installed "vim"
+  [ "$status" -eq 1 ]
+}
+
+@test "install_packages partitions cask vs formula for brew" {
+  local -a brew_calls=()
+  brew() { brew_calls+=("$*"); }
+  export -f brew
+
+  install_packages brew htop "cask:iterm2" jq "cask:firefox"
+
+  [ "${#brew_calls[@]}" -eq 2 ]
+  [ "${brew_calls[0]}" = "install htop jq" ]
+  [ "${brew_calls[1]}" = "install --cask iterm2 firefox" ]
+
+  unset -f brew
+}
+
 @test "resolve_packages handles comments and blank lines in map file" {
   local map_file="$TEST_DIR/apt.map"
   cat >"$map_file" <<'EOF'
