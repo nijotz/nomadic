@@ -686,6 +686,7 @@ install_module_packages() {
 # Detects the package manager, collects packages, resolves names, and installs.
 install_all_packages() {
   local config_dir="$1"
+  local os="${2:-}"
 
   local pkg_manager
   if ! pkg_manager="$(detect_pkg_manager)"; then
@@ -706,6 +707,13 @@ install_all_packages() {
     while IFS= read -r pkg; do
       [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
     done < <(read_package_list "$pkg_list")
+  fi
+
+  # Read OS-specific package list
+  if [[ -n "$os" && -f "$config_dir/packages/packages.$os" ]]; then
+    while IFS= read -r pkg; do
+      [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
+    done < <(read_package_list "$config_dir/packages/packages.$os")
   fi
 
   if ((${#all_pkgs[@]} == 0)); then
@@ -892,7 +900,7 @@ cmd_apply() {
     log "Skipping package install (--no-packages)"
   else
     log "Installing packages..."
-    install_all_packages "$config_dir"
+    install_all_packages "$config_dir" "$current_os"
   fi
 
   log "Done!"
