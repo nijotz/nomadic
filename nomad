@@ -305,7 +305,13 @@ collect_shell_config() {
     return 0
   fi
 
-  echo "# --- module: $mod ---"
+  local header="# --- module: $mod "
+  local pad=$((80 - ${#header}))
+  # Repeat "-" $pad times: create $pad spaces with printf, then replace each with -
+  local dashes
+  printf -v dashes '%*s' "$pad" ''
+  dashes="${dashes// /-}"
+  echo "${header}${dashes}"
 
   if [[ -x "$config_file" ]]; then
     "$config_file"
