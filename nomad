@@ -636,7 +636,9 @@ install_module_packages() {
   for pkg in $pkgs; do
     local resolved
     resolved="$(resolve_packages "$map_file" "$pkg")"
-    if ! is_pkg_installed "$resolved"; then
+    if is_pkg_installed "$resolved"; then
+      log "$mod: package '$resolved' already installed"
+    else
       missing+=("$resolved")
     fi
   done
