@@ -630,7 +630,7 @@ install_module_packages() {
   local pkgs="${_mod_pkg[$idx]}"
   [[ -z "$pkgs" ]] && return 0
 
-  local map_file="$config_dir/modules/packages/$pkg_manager.map"
+  local map_file="$config_dir/packages/$pkg_manager.map"
   local -a missing=()
   local pkg
   for pkg in $pkgs; do
@@ -671,8 +671,8 @@ install_all_packages() {
     [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
   done < <(collect_packages)
 
-  # Read base package list if packages module exists
-  local pkg_list="$config_dir/modules/packages/packages"
+  # Read base package list
+  local pkg_list="$config_dir/packages/packages"
   if [[ -f "$pkg_list" ]]; then
     while IFS= read -r pkg; do
       [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
@@ -684,7 +684,7 @@ install_all_packages() {
   fi
 
   # Resolve through map file
-  local map_file="$config_dir/modules/packages/$pkg_manager.map"
+  local map_file="$config_dir/packages/$pkg_manager.map"
   local -a resolved=()
   while IFS= read -r pkg; do
     [[ -n "$pkg" ]] && resolved+=("$pkg")
