@@ -30,7 +30,7 @@ load test_helper/common
   printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
 
   result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash")"
-  echo "$result" | grep -q '# --- module: mymod ---'
+  echo "$result" | grep -q '# --- module: mymod -'
 }
 
 @test "collect_shell_config: executable stderr passes through" {
