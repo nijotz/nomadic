@@ -52,3 +52,41 @@ load test_helper/common
   result="$(collect_shell_config "$TEST_CONFIG" "mymod" "zsh")"
   echo "$result" | grep -q 'export ZSH_THING="yes"'
 }
+
+@test "collect_shell_config: platform-specific file used when os matches" {
+  create_module "mymod"
+  printf 'export GENERIC="yes"\n' >"$TEST_CONFIG/modules/mymod/bash"
+  printf 'export MACOS="yes"\n' >"$TEST_CONFIG/modules/mymod/bash.macos"
+
+  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash" "macos")"
+  echo "$result" | grep -q 'export MACOS="yes"'
+  ! echo "$result" | grep -q 'export GENERIC="yes"'
+}
+
+@test "collect_shell_config: linux platform-specific file used on linux" {
+  create_module "mymod"
+  printf 'export GENERIC="yes"\n' >"$TEST_CONFIG/modules/mymod/bash"
+  printf 'export LINUX="yes"\n' >"$TEST_CONFIG/modules/mymod/bash.linux"
+
+  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash" "linux")"
+  echo "$result" | grep -q 'export LINUX="yes"'
+  ! echo "$result" | grep -q 'export GENERIC="yes"'
+}
+
+@test "collect_shell_config: falls back to generic when no platform file" {
+  create_module "mymod"
+  printf 'export GENERIC="yes"\n' >"$TEST_CONFIG/modules/mymod/bash"
+
+  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash" "macos")"
+  echo "$result" | grep -q 'export GENERIC="yes"'
+}
+
+@test "collect_shell_config: wrong os platform file ignored, generic used" {
+  create_module "mymod"
+  printf 'export GENERIC="yes"\n' >"$TEST_CONFIG/modules/mymod/bash"
+  printf 'export MACOS="yes"\n' >"$TEST_CONFIG/modules/mymod/bash.macos"
+
+  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash" "linux")"
+  echo "$result" | grep -q 'export GENERIC="yes"'
+  ! echo "$result" | grep -q 'export MACOS="yes"'
+}
