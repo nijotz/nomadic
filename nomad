@@ -590,7 +590,19 @@ install_packages() {
   log "Installing packages via $pkg_manager: $*"
 
   case "$pkg_manager" in
-    brew) brew install "$@" ;;
+    brew)
+      local -a formulas=() casks=()
+      local pkg
+      for pkg in "$@"; do
+        if [[ "$pkg" == cask:* ]]; then
+          casks+=("${pkg#cask:}")
+        else
+          formulas+=("$pkg")
+        fi
+      done
+      ((${#formulas[@]} > 0)) && brew install "${formulas[@]}"
+      ((${#casks[@]} > 0)) && brew install --cask "${casks[@]}"
+      ;;
     apt) sudo apt install -y "$@" ;;
     pacman) sudo pacman -S --noconfirm "$@" ;;
     *) error "Unknown package manager: $pkg_manager" ;;
@@ -600,6 +612,7 @@ install_packages() {
 # Snapshot installed packages for the detected package manager.
 # Sets global _installed_pkgs (newline-separated list) and _pkg_manager.
 _installed_pkgs=""
+_installed_casks=""
 _pkg_manager=""
 
 snapshot_installed_packages() {
@@ -608,7 +621,10 @@ snapshot_installed_packages() {
   fi
 
   case "$_pkg_manager" in
-    brew) _installed_pkgs="$(brew list --formula -1 2>/dev/null)" ;;
+    brew)
+      _installed_pkgs="$(brew list --formula -1 2>/dev/null)"
+      _installed_casks="$(brew list --cask -1 2>/dev/null)"
+      ;;
     apt) _installed_pkgs="$(dpkg-query -W -f '${Package}\n' 2>/dev/null)" ;;
     pacman) _installed_pkgs="$(pacman -Qq 2>/dev/null)" ;;
   esac
@@ -617,7 +633,11 @@ snapshot_installed_packages() {
 # Check if a package is already installed (against the snapshot).
 is_pkg_installed() {
   local pkg="$1"
-  echo "$_installed_pkgs" | grep -qx "$pkg"
+  if [[ "$pkg" == cask:* ]]; then
+    echo "$_installed_casks" | grep -qx "${pkg#cask:}"
+  else
+    echo "$_installed_pkgs" | grep -qx "$pkg"
+  fi
 }
 
 # Install a module's pkg: packages, skipping any already installed.
@@ -653,7 +673,11 @@ install_module_packages() {
     # Update snapshot so subsequent modules see newly installed packages
     local pkg
     for pkg in "${missing[@]}"; do
-      _installed_pkgs="${_installed_pkgs}"$'\n'"${pkg}"
+      if [[ "$pkg" == cask:* ]]; then
+        _installed_casks="${_installed_casks}"$'\n'"${pkg#cask:}"
+      else
+        _installed_pkgs="${_installed_pkgs}"$'\n'"${pkg}"
+      fi
     done
   fi
 }
