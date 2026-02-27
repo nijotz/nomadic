@@ -745,7 +745,16 @@ SHELL
 # --- Apply --------------------------------------------------------------------
 
 cmd_apply() {
-  local config_dir="${1:-}"
+  local skip_packages=0
+  local config_dir=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --no-packages|-P) skip_packages=1 ;;
+      *) config_dir="$1" ;;
+    esac
+    shift
+  done
 
   # Resolve config directory: explicit arg → remembered path → current dir
   if [[ -z "$config_dir" ]]; then
@@ -850,8 +859,12 @@ cmd_apply() {
   log "Shell config applied. To pick up changes: exec bash  (or restart your shell)"
 
   # Install remaining packages from flat package list (safe to ctrl-c)
-  log "Installing packages..."
-  install_all_packages "$config_dir"
+  if ((skip_packages)); then
+    log "Skipping package install (--no-packages)"
+  else
+    log "Installing packages..."
+    install_all_packages "$config_dir"
+  fi
 
   log "Done!"
 }
@@ -886,7 +899,8 @@ Usage: nomad <command> [args]
 
 Commands:
   init [path]          Scaffold a new config directory (default: current dir)
-  apply [path]         Apply config: resolve deps, install packages, link files
+  apply [path] [-P]    Apply config: resolve deps, install packages, link files
+                         -P, --no-packages  Skip bulk package install
   profile <name>       Set this machine's profile
   enable <module>      Enable a module on this machine
   disable <module>     Disable a module on this machine
