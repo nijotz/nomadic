@@ -601,7 +601,11 @@ install_packages() {
         fi
       done
       ((${#formulas[@]} > 0)) && brew install "${formulas[@]}"
-      ((${#casks[@]} > 0)) && brew install --cask "${casks[@]}"
+      if ((${#casks[@]} > 0)); then
+        if ! brew install --cask "${casks[@]}" 2>&1; then
+          warn "Cask install failed. If the app already exists, try: brew install --adopt --cask ${casks[*]}"
+        fi
+      fi
       ;;
     apt) sudo apt install -y "$@" ;;
     pacman) sudo pacman -S --noconfirm "$@" ;;
