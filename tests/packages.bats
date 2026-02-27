@@ -162,3 +162,35 @@ EOF
   [ "${lines[0]}" = "fd-find" ]
   [ "${lines[1]}" = "ripgrep" ]
 }
+
+@test "install_all_packages reads both base and OS-specific package files" {
+  mkdir -p "$TEST_CONFIG/packages"
+  cat >"$TEST_CONFIG/packages/packages" <<'EOF'
+htop
+jq
+EOF
+  cat >"$TEST_CONFIG/packages/packages.macos" <<'EOF'
+scroll-reverser
+alt-tab
+EOF
+
+  # Save originals
+  eval "$(declare -f detect_pkg_manager | sed 's/detect_pkg_manager/orig_detect_pkg_manager/')"
+  eval "$(declare -f install_packages | sed 's/install_packages/orig_install_packages/')"
+
+  # Stub detect_pkg_manager to return brew (no actual brew needed)
+  detect_pkg_manager() { echo "brew"; }
+  # Stub install_packages to print what it receives (skip actual install)
+  install_packages() { shift; printf '%s\n' "$@"; }
+
+  run install_all_packages "$TEST_CONFIG" "macos"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"htop"* ]]
+  [[ "$output" == *"jq"* ]]
+  [[ "$output" == *"scroll-reverser"* ]]
+  [[ "$output" == *"alt-tab"* ]]
+
+  # Restore
+  eval "$(declare -f orig_detect_pkg_manager | sed 's/orig_detect_pkg_manager/detect_pkg_manager/')"
+  eval "$(declare -f orig_install_packages | sed 's/orig_install_packages/install_packages/')"
+}
