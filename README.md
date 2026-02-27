@@ -56,7 +56,7 @@ my-config/
 | File | Purpose |
 |------|---------|
 | `deps` | Dependency declarations (see below) |
-| `bash` / `fish` / `zsh` | Shell config. Static files are concatenated; executable files are run and stdout is captured |
+| `bash` / `fish` / `zsh` | Shell config. Static files are concatenated; executable files are run and stdout is captured. OS-specific variants (e.g., `bash.macos`, `zsh.ubuntu`) are used when present, falling back to the base file |
 | `setup` | One-time setup script, sourced in the current shell |
 | `links` | Symlink mappings: `<source> <target>` per line, source relative to module dir, `~` expanded in target |
 
