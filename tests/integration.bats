@@ -85,3 +85,18 @@ run_shell() {
   result="$(run_shell 'echo $APP')"
   [ "$result" = "loaded:app" ]
 }
+
+@test "integration: module with pkg directive does not cause unbound variable" {
+  mkdir -p "$TEST_CONFIG/modules/tool"
+  printf 'export TOOL="yes"\n' >"$TEST_CONFIG/modules/tool/bash"
+  printf 'pkg: some-package\n' >"$TEST_CONFIG/modules/tool/deps"
+  printf 'tool\n' >"$TEST_CONFIG/profiles/default"
+
+  # Hide brew so install_module_packages skips without actually installing.
+  # The bug was an unbound variable reference that crashed before even
+  # reaching the package manager.
+  run env HOME="$HOME" NOMAD_STATE_DIR="$NOMAD_STATE_DIR" \
+    PATH="/usr/bin:/bin" "$NOMAD_ROOT/nomad" apply --no-packages "$TEST_CONFIG"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unbound variable"* ]]
+}

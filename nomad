@@ -630,7 +630,7 @@ install_module_packages() {
   local pkgs="${_mod_pkg[$idx]}"
   [[ -z "$pkgs" ]] && return 0
 
-  local map_file="$config_dir/packages/$pkg_manager.map"
+  local map_file="$config_dir/packages/$_pkg_manager.map"
   local -a missing=()
   local pkg
   for pkg in $pkgs; do
