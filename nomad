@@ -299,7 +299,12 @@ collect_shell_config() {
   local config_dir="$1"
   local mod="$2"
   local shell="$3"
-  local config_file="$config_dir/modules/$mod/$shell"
+  local os="${4:-}"
+  local config_file="$config_dir/modules/$mod/$shell.$os"
+
+  if [[ -z "$os" ]] || [[ ! -f "$config_file" ]]; then
+    config_file="$config_dir/modules/$mod/$shell"
+  fi
 
   if [[ ! -f "$config_file" ]]; then
     return 0
@@ -828,9 +833,9 @@ cmd_apply() {
     run_setup "$config_dir" "$mod"
     process_links "$config_dir" "$mod"
 
-    ((has_bash)) && collect_shell_config "$config_dir" "$mod" "bash" >>"$rc_bash"
-    ((has_fish)) && collect_shell_config "$config_dir" "$mod" "fish" >>"$rc_fish"
-    ((has_zsh)) && collect_shell_config "$config_dir" "$mod" "zsh" >>"$rc_zsh"
+    ((has_bash)) && collect_shell_config "$config_dir" "$mod" "bash" "$current_os" >>"$rc_bash"
+    ((has_fish)) && collect_shell_config "$config_dir" "$mod" "fish" "$current_os" >>"$rc_fish"
+    ((has_zsh)) && collect_shell_config "$config_dir" "$mod" "zsh" "$current_os" >>"$rc_zsh"
 
     # Source accumulated bash config so later modules see prior exports
     if [[ -s "$rc_bash" ]]; then
