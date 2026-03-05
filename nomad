@@ -4,7 +4,7 @@ set -euo pipefail
 # --- Constants / Globals ------------------------------------------------------
 
 NOMAD_VERSION="0.1.0"
-NOMAD_STATE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/nomad"
+NOMAD_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/nomad"
 
 # Global parallel arrays, populated by load_module_deps. All share the same
 # index. Use parallel indexed arrays instead of associative arrays for bash 3.2
@@ -251,6 +251,7 @@ run_setup() {
 process_links() {
   local config_dir="$1"
   local mod="$2"
+  local force="${3:-0}"
   local links_file="$config_dir/modules/$mod/links"
 
   if [[ ! -f "$links_file" ]]; then
@@ -282,8 +283,17 @@ process_links() {
         log "$mod: $tgt already linked"
         continue
       fi
-      warn "$mod: $tgt already exists, skipping"
-      continue
+      if ((force)); then
+        local backup_dir="$NOMAD_STATE_DIR/backups"
+        mkdir -p "$backup_dir"
+        local backup_name
+        backup_name="$(basename "$tgt").$(date +%Y%m%dT%H%M%S)"
+        mv "$tgt" "$backup_dir/$backup_name"
+        log "$mod: backed up $tgt -> $backup_dir/$backup_name"
+      else
+        warn "$mod: $tgt already exists, skipping (use --force to overwrite)"
+        continue
+      fi
     fi
 
     ln -s "$src" "$tgt"
@@ -789,11 +799,13 @@ SHELL
 
 cmd_apply() {
   local skip_packages=0
+  local force_links=0
   local config_dir=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --no-packages|-P) skip_packages=1 ;;
+      --force|-f) force_links=1 ;;
       *) config_dir="$1" ;;
     esac
     shift
@@ -869,7 +881,7 @@ cmd_apply() {
     log "Applying module: $mod"
 
     run_setup "$config_dir" "$mod"
-    process_links "$config_dir" "$mod"
+    process_links "$config_dir" "$mod" "$force_links"
 
     ((has_bash)) && collect_shell_config "$config_dir" "$mod" "bash" "$current_os" >>"$rc_bash"
     ((has_fish)) && collect_shell_config "$config_dir" "$mod" "fish" "$current_os" >>"$rc_fish"
@@ -956,8 +968,9 @@ Usage: nomad <command> [args]
 
 Commands:
   init [path]          Scaffold a new config directory (default: current dir)
-  apply [path] [-P]    Apply config: resolve deps, install packages, link files
+  apply [path] [-P] [-f]  Apply config: resolve deps, install packages, link files
                          -P, --no-packages  Skip bulk package install
+                         -f, --force        Overwrite existing files when linking (backs up originals)
   profile <name>       Set this machine's profile
   enable <module>      Enable a module on this machine
   disable <module>     Disable a module on this machine

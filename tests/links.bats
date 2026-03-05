@@ -61,6 +61,36 @@ load test_helper/common
   [ ! -L "$TEST_DIR/target" ]
 }
 
+@test "process_links --force: backs up existing file and creates symlink" {
+  create_module "mymod"
+  echo "hello" >"$TEST_CONFIG/modules/mymod/myfile"
+  printf 'myfile %s/target\n' "$TEST_DIR" >"$TEST_CONFIG/modules/mymod/links"
+
+  echo "existing content" >"$TEST_DIR/target"
+
+  process_links "$TEST_CONFIG" "mymod" 1
+  # Target should now be a symlink
+  [ -L "$TEST_DIR/target" ]
+  [ "$(readlink "$TEST_DIR/target")" = "$TEST_CONFIG/modules/mymod/myfile" ]
+  # Backup should exist with original content
+  local backup
+  backup="$(ls "$NOMAD_STATE_DIR/backups"/target.* 2>/dev/null | head -1)"
+  [ -n "$backup" ]
+  [ "$(cat "$backup")" = "existing content" ]
+}
+
+@test "process_links --force: backs up wrong symlink and replaces it" {
+  create_module "mymod"
+  echo "hello" >"$TEST_CONFIG/modules/mymod/myfile"
+  printf 'myfile %s/target\n' "$TEST_DIR" >"$TEST_CONFIG/modules/mymod/links"
+
+  ln -s /some/wrong/path "$TEST_DIR/target"
+
+  process_links "$TEST_CONFIG" "mymod" 1
+  [ -L "$TEST_DIR/target" ]
+  [ "$(readlink "$TEST_DIR/target")" = "$TEST_CONFIG/modules/mymod/myfile" ]
+}
+
 @test "process_links: skips blank lines and comments" {
   create_module "mymod"
   echo "hello" >"$TEST_CONFIG/modules/mymod/file1"
