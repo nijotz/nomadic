@@ -8,6 +8,7 @@ source "$NOMAD_ROOT/nomad"
 setup() {
   TEST_DIR="$(mktemp -d)"
   TEST_CONFIG="$TEST_DIR/config"
+  NOMAD_STATE_DIR="$TEST_DIR/state"
   mkdir -p "$TEST_CONFIG/modules"
   mkdir -p "$TEST_CONFIG/profiles"
 }
