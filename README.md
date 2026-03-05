@@ -58,7 +58,7 @@ my-config/
 | `deps` | Dependency declarations (see below) |
 | `bash` / `fish` / `zsh` | Shell config. Static files are concatenated; executable files are run and stdout is captured. OS-specific variants (e.g., `bash.macos`, `zsh.ubuntu`) are used when present, falling back to the base file |
 | `setup` | One-time setup script, sourced in the current shell |
-| `links` | Symlink mappings: `<source> <target>` per line, source relative to module dir, `~` expanded in target |
+| `links` | Symlink mappings: `<source> <target>` per line, source relative to module dir, `~` expanded in target. Existing targets are skipped unless `--force` is used, which backs up the original to `~/.local/state/nomad/backups/` |
 
 ## Deps file format
 
@@ -74,10 +74,12 @@ All directives are optional. No `deps` file = no constraints.
 ## Commands
 
 ```
-nomad init [path]       Scaffold a new config directory
-nomad apply [path]      Apply config (remembers path for next time)
-nomad help              Show help
-nomad version           Show version
+nomad init [path]         Scaffold a new config directory
+nomad apply [path] [-P] [-f]  Apply config (remembers path for next time)
+  -P, --no-packages       Skip bulk package install
+  -f, --force             Overwrite existing files when linking (backs up originals)
+nomad help                Show help
+nomad version             Show version
 ```
 
 ## Requirements
@@ -98,6 +100,6 @@ cp -r ~/.nomad "$tmp/.nomad"
 env HOME="$tmp" bash --norc --noprofile
 # inside the clean shell:
 ./nomad apply
-source ~/.config/nomad/config.bash
+source ~/.local/state/nomad/config.bash
 # exit when done - everything is throwaway
 ```
