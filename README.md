@@ -1,6 +1,6 @@
 # nomadic
 
-Portable shell environment manager. One bash script, no dependencies.
+Portable shell environment manager. One bash script, no dependencies. Previously known as nomad until hashicorp took my name (lawsuit pending).
 
 nomadic separates the **engine** (this script) from the **config** (your personal repo of dotfiles, shell config, scripts, and packages). Point it at a git repo, and your environment is ready.
 
