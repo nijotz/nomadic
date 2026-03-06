@@ -795,6 +795,37 @@ SHELL
   log "Edit profiles/default to choose which modules to enable"
 }
 
+# --- Config Repo --------------------------------------------------------------
+
+# Check if a string looks like a git URL.
+is_git_url() {
+  case "$1" in
+    https://*|git@*|ssh://*|git://*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Clone or update a config repo. Returns the local path via stdout.
+sync_config_repo() {
+  local url="$1"
+  local repo_dir="$NOMADIC_DIR/config"
+
+  if [[ -d "$repo_dir/.git" ]]; then
+    local existing_url
+    existing_url="$(git -C "$repo_dir" remote get-url origin 2>/dev/null || true)"
+    if [[ "$existing_url" != "$url" ]]; then
+      error "Config repo at $repo_dir points to $existing_url, not $url"
+    fi
+    log "Updating config repo..."
+    git -C "$repo_dir" pull --ff-only
+  else
+    log "Cloning config repo..."
+    git clone "$url" "$repo_dir"
+  fi
+
+  echo "$repo_dir"
+}
+
 # --- Apply --------------------------------------------------------------------
 
 cmd_apply() {
@@ -811,8 +842,10 @@ cmd_apply() {
     shift
   done
 
-  # Resolve config directory: explicit arg → remembered path → current dir
-  if [[ -z "$config_dir" ]]; then
+  # Resolve config directory: git URL → explicit path → remembered path → default
+  if [[ -n "$config_dir" ]] && is_git_url "$config_dir"; then
+    config_dir="$(sync_config_repo "$config_dir")"
+  elif [[ -z "$config_dir" ]]; then
     local remembered="$NOMADIC_DIR/state/config-path"
     if [[ -f "$remembered" ]]; then
       config_dir="$(cat "$remembered")"
@@ -968,7 +1001,8 @@ Usage: nomadic <command> [args]
 
 Commands:
   init [path]          Scaffold a new config directory (default: current dir)
-  apply [path] [-P] [-f]  Apply config: resolve deps, install packages, link files
+  apply [path|url] [-P] [-f]  Apply config: resolve deps, install packages, link files
+                         Accepts a local path or git URL (clones to ~/.nomadic/config/)
                          -P, --no-packages  Skip bulk package install
                          -f, --force        Overwrite existing files when linking (backs up originals)
   profile <name>       Set this machine's profile
