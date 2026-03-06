@@ -2,13 +2,13 @@
 indent_style = space
 indent_size = 2
 
-# shfmt options for shell scripts (including extensionless files like 'nomad')
+# shfmt options for shell scripts (including extensionless files like 'nomadic')
 [*.{bash,sh}]
 shell_variant = bash
 binary_next_line = true
 switch_case_indent = true
 
-[nomad]
+[nomadic]
 shell_variant = bash
 binary_next_line = true
 switch_case_indent = true

@@ -40,7 +40,7 @@ load test_helper/common
   create_module "foo" "after: bar"
   create_module "bar" "after: foo"
 
-  run bash -c "source '$NOMAD_ROOT/nomad' && load_module_deps '$TEST_CONFIG' foo bar && toposort"
+  run bash -c "source '$NOMADIC_ROOT/nomadic' && load_module_deps '$TEST_CONFIG' foo bar && toposort"
   [ "$status" -eq 1 ]
   echo "$output" | grep -q 'cycle'
 }
@@ -50,7 +50,7 @@ load test_helper/common
   create_module "B" "after: A"
   create_module "C" "after: B"
 
-  run bash -c "source '$NOMAD_ROOT/nomad' && load_module_deps '$TEST_CONFIG' A B C && toposort"
+  run bash -c "source '$NOMADIC_ROOT/nomadic' && load_module_deps '$TEST_CONFIG' A B C && toposort"
   [ "$status" -eq 1 ]
   echo "$output" | grep -q 'cycle'
 }
