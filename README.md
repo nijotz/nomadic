@@ -1,20 +1,20 @@
-# nomad
+# nomadic
 
 Portable shell environment manager. One bash script, no dependencies.
 
-Nomad separates the **engine** (this script) from the **config** (your personal repo of dotfiles, shell config, scripts, and packages). Clone your config on any machine, run `nomad apply`, and your environment is ready.
+nomadic separates the **engine** (this script) from the **config** (your personal repo of dotfiles, shell config, scripts, and packages). Clone your config on any machine, run `nomadic apply`, and your environment is ready.
 
 ## Quick start
 
 ```bash
 # Scaffold a new config directory
-nomad init ~/my-config
+nomadic init ~/my-config
 
 # Apply it
-nomad apply ~/my-config
+nomadic apply ~/my-config
 
 # Next time, just:
-nomad apply
+nomadic apply
 ```
 
 ## How it works
@@ -58,7 +58,7 @@ my-config/
 | `deps` | Dependency declarations (see below) |
 | `bash` / `fish` / `zsh` | Shell config. Static files are concatenated; executable files are run and stdout is captured. OS-specific variants (e.g., `bash.macos`, `zsh.ubuntu`) are used when present, falling back to the base file |
 | `setup` | One-time setup script, sourced in the current shell |
-| `links` | Symlink mappings: `<source> <target>` per line, source relative to module dir, `~` expanded in target. Existing targets are skipped unless `--force` is used, which backs up the original to `~/.local/state/nomad/backups/` |
+| `links` | Symlink mappings: `<source> <target>` per line, source relative to module dir, `~` expanded in target. Existing targets are skipped unless `--force` is used, which backs up the original to `~/.nomadic/backups/` |
 
 ## Deps file format
 
@@ -74,12 +74,12 @@ All directives are optional. No `deps` file = no constraints.
 ## Commands
 
 ```
-nomad init [path]         Scaffold a new config directory
-nomad apply [path] [-P] [-f]  Apply config (remembers path for next time)
+nomadic init [path]         Scaffold a new config directory
+nomadic apply [path] [-P] [-f]  Apply config (remembers path for next time)
   -P, --no-packages       Skip bulk package install
   -f, --force             Overwrite existing files when linking (backs up originals)
-nomad help                Show help
-nomad version             Show version
+nomadic help                Show help
+nomadic version             Show version
 ```
 
 ## Requirements
@@ -92,14 +92,14 @@ Bash 3.2+ (ships with macOS). No other dependencies.
 bats tests/
 ```
 
-To test `nomad apply` without touching your real shell config, run inside a temporary HOME:
+To test `nomadic apply` without touching your real shell config, run inside a temporary HOME:
 
 ```bash
 tmp=$(mktemp -d)
-cp -r ~/.nomad "$tmp/.nomad"
+cp -r ~/.nomadic "$tmp/.nomadic"
 env HOME="$tmp" bash --norc --noprofile
 # inside the clean shell:
-./nomad apply
-source ~/.local/state/nomad/config.bash
+./nomadic apply
+source ~/.nomadic/config.bash
 # exit when done - everything is throwaway
 ```

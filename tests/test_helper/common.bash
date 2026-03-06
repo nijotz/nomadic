@@ -1,14 +1,14 @@
-# Common test helper for nomad bats tests
+# Common test helper for nomadic bats tests
 
-# Source the nomad script to get all functions
-NOMAD_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
-source "$NOMAD_ROOT/nomad"
+# Source the nomadic script to get all functions
+NOMADIC_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
+source "$NOMADIC_ROOT/nomadic"
 
 # Create a fresh temp directory for each test
 setup() {
   TEST_DIR="$(mktemp -d)"
   TEST_CONFIG="$TEST_DIR/config"
-  NOMAD_STATE_DIR="$TEST_DIR/state"
+  NOMADIC_DIR="$TEST_DIR/nomadic"
   mkdir -p "$TEST_CONFIG/modules"
   mkdir -p "$TEST_CONFIG/profiles"
 }

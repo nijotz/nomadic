@@ -14,13 +14,13 @@ load test_helper/common
 @test "process_links: expands tilde in target" {
   create_module "mymod"
   echo "hello" >"$TEST_CONFIG/modules/mymod/myfile"
-  printf 'myfile ~/.test-nomad-link\n' >"$TEST_CONFIG/modules/mymod/links"
+  printf 'myfile ~/.test-nomadic-link\n' >"$TEST_CONFIG/modules/mymod/links"
 
   local orig_home="$HOME"
   HOME="$TEST_DIR/home"
   mkdir -p "$HOME"
   process_links "$TEST_CONFIG" "mymod"
-  [ -L "$HOME/.test-nomad-link" ]
+  [ -L "$HOME/.test-nomadic-link" ]
   HOME="$orig_home"
 }
 
@@ -74,7 +74,7 @@ load test_helper/common
   [ "$(readlink "$TEST_DIR/target")" = "$TEST_CONFIG/modules/mymod/myfile" ]
   # Backup should exist with original content
   local backup
-  backup="$(ls "$NOMAD_STATE_DIR/backups"/target.* 2>/dev/null | head -1)"
+  backup="$(ls "$NOMADIC_DIR/backups"/target.* 2>/dev/null | head -1)"
   [ -n "$backup" ]
   [ "$(cat "$backup")" = "existing content" ]
 }
