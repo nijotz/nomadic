@@ -4,6 +4,12 @@ Portable shell environment manager. One bash script, no dependencies.
 
 nomadic separates the **engine** (this script) from the **config** (your personal repo of dotfiles, shell config, scripts, and packages). Point it at a git repo, and your environment is ready.
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nijotz/nomadic/main/install.sh | bash
+```
+
 ## Quick start
 
 ```bash
