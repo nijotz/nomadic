@@ -898,12 +898,14 @@ sync_config_repo() {
 cmd_apply() {
   local skip_packages=0
   local force_links=0
+  local skip_pull=0
   local config_dir=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --no-packages | -P) skip_packages=1 ;;
       --force | -f) force_links=1 ;;
+      --no-pull | -L) skip_pull=1 ;;
       *) config_dir="$1" ;;
     esac
     shift
@@ -914,6 +916,15 @@ cmd_apply() {
     config_dir="$(sync_config_repo "$config_dir")"
   elif [[ -z "$config_dir" ]]; then
     config_dir="$(resolve_config_dir)"
+    # Pull latest if config is a git repo
+    if ((!skip_pull)) && [[ -d "$config_dir/.git" ]]; then
+      log "Pulling config repo..."
+      if git -C "$config_dir" pull --ff-only >&2; then
+        git -C "$config_dir" submodule update --init --recursive >&2
+      else
+        warn "Could not pull config repo, using local copy"
+      fi
+    fi
   fi
 
   if [[ ! -d "$config_dir/modules" ]]; then
@@ -1294,8 +1305,9 @@ Usage: nomadic <command> [args]
 
 Commands:
   init [path]          Scaffold a new config directory (default: ~/.nomadic/config/)
-  apply [path|url] [-P] [-f]  Apply config: resolve deps, install packages, link files
+  apply [path|url] [-L] [-P] [-f]  Apply config: resolve deps, install packages, link files
                          Accepts a local path or git URL (clones to ~/.nomadic/config/)
+                         -L, --no-pull      Local config only; skip pulling
                          -P, --no-packages  Skip bulk package install
                          -f, --force        Overwrite existing files when linking (backs up originals)
   status [path]        Check config for uncommitted changes, unpushed/behind remote
