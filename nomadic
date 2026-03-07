@@ -906,6 +906,7 @@ cmd_apply() {
       --no-packages | -P) skip_packages=1 ;;
       --force | -f) force_links=1 ;;
       --no-pull | -L) skip_pull=1 ;;
+      -*) error "Unknown option: $1" ;;
       *) config_dir="$1" ;;
     esac
     shift
@@ -1328,6 +1329,14 @@ version() {
 main() {
   local cmd="${1:-}"
   shift || true
+
+  # Show help if --help/-h appears after any subcommand
+  for arg in "$@"; do
+    if [[ "$arg" == "--help" ]] || [[ "$arg" == "-h" ]]; then
+      usage
+      return 0
+    fi
+  done
 
   case "$cmd" in
     init) cmd_init "$@" ;;
