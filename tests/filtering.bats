@@ -70,28 +70,3 @@ load test_helper/common
   [ "$(echo "$result" | sed -n '2p')" = "alpha" ]
   [ "$(echo "$result" | sed -n '3p')" = "bravo" ]
 }
-
-@test "check_cmd: returns 0 when command exists" {
-  create_module "mymod" "cmd: bash"
-  load_module_deps "$TEST_CONFIG" "mymod"
-
-  run check_cmd "mymod"
-  [ "$status" -eq 0 ]
-}
-
-@test "check_cmd: returns 1 when command is missing" {
-  create_module "mymod" "cmd: nonexistent_command_xyz"
-  load_module_deps "$TEST_CONFIG" "mymod"
-
-  run check_cmd "mymod"
-  [ "$status" -eq 1 ]
-  echo "$output" | grep -q 'nonexistent_command_xyz'
-}
-
-@test "check_cmd: returns 0 when no cmd: requirement" {
-  create_module "mymod"
-  load_module_deps "$TEST_CONFIG" "mymod"
-
-  run check_cmd "mymod"
-  [ "$status" -eq 0 ]
-}

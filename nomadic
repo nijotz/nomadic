@@ -12,7 +12,6 @@ NOMADIC_DIR="${NOMADIC_HOME:-$HOME/.nomadic}"
 _mod_name=()
 _mod_after=()
 _mod_pkg=()
-_mod_cmd=()
 _mod_os=()
 
 # --- Utility Functions --------------------------------------------------------
@@ -121,7 +120,6 @@ discover_modules() {
 #   _mod_name[i]  = module name
 #   _mod_after[i] = "after:" value (space-separated module names)
 #   _mod_pkg[i]   = "pkg:" value (space-separated package names)
-#   _mod_cmd[i]   = "cmd:" value
 #   _mod_os[i]    = "os:" value
 load_module_deps() {
   local config_dir="$1"
@@ -130,13 +128,12 @@ load_module_deps() {
   _mod_name=("$@")
   _mod_after=()
   _mod_pkg=()
-  _mod_cmd=()
   _mod_os=()
 
   local mod
   for mod in "$@"; do
     local deps_file="$config_dir/modules/$mod/deps"
-    local after="" pkg="" cmd="" os=""
+    local after="" pkg="" os=""
 
     if [[ -f "$deps_file" ]]; then
       while IFS= read -r line || [[ -n "$line" ]]; do
@@ -147,7 +144,6 @@ load_module_deps() {
         case "$line" in
           after:*) after="$(trim "${line#after:}")" ;;
           pkg:*) pkg="$(trim "${line#pkg:}")" ;;
-          cmd:*) cmd="$(trim "${line#cmd:}")" ;;
           os:*) os="$(trim "${line#os:}")" ;;
           *) warn "Unknown directive in $deps_file: $line" ;;
         esac
@@ -156,7 +152,6 @@ load_module_deps() {
 
     _mod_after+=("$after")
     _mod_pkg+=("$pkg")
-    _mod_cmd+=("$cmd")
     _mod_os+=("$os")
   done
 }
@@ -202,28 +197,6 @@ filter_by_os() {
       fi
     done
   done
-}
-
-# Check if a module's cmd: requirement is satisfied.
-# Returns 0 if no requirement or command exists, 1 if missing.
-check_cmd() {
-  local mod="$1"
-  local idx
-  if ! idx="$(index_of "$mod" "${_mod_name[@]}")"; then
-    return 0
-  fi
-
-  local cmd="${_mod_cmd[$idx]}"
-  if [[ -z "$cmd" ]]; then
-    return 0
-  fi
-
-  if command -v "$cmd" &>/dev/null; then
-    return 0
-  fi
-
-  warn "Module '$mod' requires command '$cmd' which is not installed (skipping)"
-  return 1
 }
 
 # Source a module's setup script if present.
@@ -853,7 +826,7 @@ modules/          One directory per module
   <name>/
     bash          Shell config sourced into .bashrc (or zsh for .zshrc)
     bash.macos    OS-specific variant (loaded instead of bash on macOS)
-    deps          Module metadata: ordering (after:), packages (pkg:), OS filter (os:), required commands (cmd:)
+    deps          Module metadata: ordering (after:), packages (pkg:), OS filter (os:)
     links         Symlink mappings: <source> <target> (~ expanded in target)
     setup         Script run once during apply
 packages/         Base package lists installed on every apply
@@ -998,12 +971,7 @@ cmd_apply() {
 
   # Process each module in dependency order
   for mod in "${filtered[@]}"; do
-    # Install module's declared packages before checking cmd availability
     install_module_packages "$config_dir" "$mod"
-
-    if ! check_cmd "$mod"; then
-      continue
-    fi
 
     log "Applying module: $mod"
 

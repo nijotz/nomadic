@@ -65,19 +65,6 @@ teardown() {
   ! grep -q 'export WRONG="yes"' "$NOMADIC_DIR/config.bash"
 }
 
-@test "apply: skips modules with missing cmd requirement" {
-  create_module "good"
-  printf 'export GOOD="yes"\n' >"$TEST_CONFIG/modules/good/bash"
-  create_module "needs-missing" "cmd: nonexistent_command_xyz"
-  printf 'export BAD="yes"\n' >"$TEST_CONFIG/modules/needs-missing/bash"
-
-  cmd_apply "$TEST_CONFIG"
-
-  [ -f "$NOMADIC_DIR/config.bash" ]
-  grep -q 'export GOOD="yes"' "$NOMADIC_DIR/config.bash"
-  ! grep -q 'export BAD="yes"' "$NOMADIC_DIR/config.bash"
-}
-
 @test "apply: preserves dependency order in rc file" {
   create_module "first"
   printf 'export FIRST="yes"\n' >"$TEST_CONFIG/modules/first/bash"
