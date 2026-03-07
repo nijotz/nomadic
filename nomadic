@@ -908,7 +908,9 @@ sync_config_repo() {
       error "Config repo at $repo_dir points to $existing_url, not $url"
     fi
     log "Updating config repo..."
-    git -C "$repo_dir" pull --ff-only
+    if ! git -C "$repo_dir" pull --ff-only; then
+      error "Could not fast-forward config repo. Resolve manually: cd $repo_dir && git pull"
+    fi
     git -C "$repo_dir" submodule update --init --recursive
   else
     log "Cloning config repo..."
