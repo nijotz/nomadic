@@ -903,10 +903,22 @@ cmd_apply() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --no-packages | -P) skip_packages=1 ;;
-      --force | -f) force_links=1 ;;
-      --no-pull | -L) skip_pull=1 ;;
-      -*) error "Unknown option: $1" ;;
+      --no-packages) skip_packages=1 ;;
+      --force) force_links=1 ;;
+      --no-pull) skip_pull=1 ;;
+      --*) error "Unknown option: $1" ;;
+      -*)
+        # Expand combined short flags: -fPL → -f -P -L
+        local i
+        for ((i = 1; i < ${#1}; i++)); do
+          case "${1:$i:1}" in
+            P) skip_packages=1 ;;
+            f) force_links=1 ;;
+            L) skip_pull=1 ;;
+            *) error "Unknown option: -${1:$i:1}" ;;
+          esac
+        done
+        ;;
       *) config_dir="$1" ;;
     esac
     shift
