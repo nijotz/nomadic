@@ -92,11 +92,11 @@ run_shell() {
   printf 'pkg: some-package\n' >"$TEST_CONFIG/modules/tool/deps"
   printf 'tool\n' >"$TEST_CONFIG/profiles/default"
 
-  # Hide brew so install_module_packages skips without actually installing.
-  # The bug was an unbound variable reference that crashed before even
-  # reaching the package manager.
+  # Run apply with a pkg: directive. The bug was an unbound variable
+  # reference that crashed when _mod_pkg was set but empty-ish.
+  # --no-packages skips bulk install; we just need the script to not crash.
   run env HOME="$HOME" NOMADIC_DIR="$NOMADIC_DIR" \
-    PATH="/usr/bin:/bin" "$NOMADIC_ROOT/nomadic" apply --no-packages "$TEST_CONFIG"
+    "$NOMADIC_ROOT/nomadic" apply --no-packages "$TEST_CONFIG"
   [ "$status" -eq 0 ]
   [[ "$output" != *"unbound variable"* ]]
 }
