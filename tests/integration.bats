@@ -19,13 +19,13 @@ teardown() {
 
 # Helper: run nomadic as a standalone script with isolated env
 run_nomadic() {
-  env HOME="$HOME" NOMADIC_DIR="$NOMADIC_DIR" \
+  env HOME="$HOME" NOMADIC_HOME="$NOMADIC_DIR" \
     "$NOMADIC_ROOT/nomadic" "$@"
 }
 
 # Helper: spawn a clean bash that sources the infected ~/.bashrc
 run_shell() {
-  env HOME="$HOME" NOMADIC_DIR="$NOMADIC_DIR" \
+  env HOME="$HOME" NOMADIC_HOME="$NOMADIC_DIR" \
     bash --norc --noprofile -c "source '$HOME/.bashrc' && $1"
 }
 
@@ -86,6 +86,50 @@ run_shell() {
   [ "$result" = "loaded:app" ]
 }
 
+@test "integration: apply with git URL containing submodules" {
+  export GIT_CONFIG_COUNT=3
+  export GIT_CONFIG_KEY_0=protocol.file.allow
+  export GIT_CONFIG_VALUE_0=always
+  export GIT_CONFIG_KEY_1=user.email
+  export GIT_CONFIG_VALUE_1=test@test.com
+  export GIT_CONFIG_KEY_2=user.name
+  export GIT_CONFIG_VALUE_2=Test
+
+  # Create a submodule repo
+  local sub_remote="$TEST_DIR/sub.git"
+  git init --bare "$sub_remote" 2>/dev/null
+  local sub_work="$TEST_DIR/sub-work"
+  git clone "$sub_remote" "$sub_work" 2>/dev/null
+  printf 'submodule data\n' >"$sub_work/init.lua"
+  git -C "$sub_work" add -A
+  git -C "$sub_work" commit -m "sub init" 2>/dev/null
+  git -C "$sub_work" push 2>/dev/null
+
+  # Create a config repo with a submodule inside modules/
+  local config_remote="$TEST_DIR/config-remote.git"
+  git init --bare "$config_remote" 2>/dev/null
+  local config_work="$TEST_DIR/config-work"
+  git clone "$config_remote" "$config_work" 2>/dev/null
+  mkdir -p "$config_work/modules/shell"
+  printf 'export SUB_TEST="yes"\n' >"$config_work/modules/shell/bash"
+  git -C "$config_work" add -A
+  git -C "$config_work" commit -m "add shell module" 2>/dev/null
+  git -C "$config_work" submodule add "$sub_remote" modules/nvim 2>/dev/null
+  git -C "$config_work" commit -m "add nvim submodule" 2>/dev/null
+  git -C "$config_work" push 2>/dev/null
+
+  # Apply via git URL — this is where the bug was: submodule checkout
+  # output got mixed into the config path
+  run env HOME="$HOME" NOMADIC_HOME="$NOMADIC_DIR" \
+    GIT_CONFIG_COUNT=3 \
+    GIT_CONFIG_KEY_0=protocol.file.allow GIT_CONFIG_VALUE_0=always \
+    GIT_CONFIG_KEY_1=user.email GIT_CONFIG_VALUE_1=test@test.com \
+    GIT_CONFIG_KEY_2=user.name GIT_CONFIG_VALUE_2=Test \
+    "$NOMADIC_ROOT/nomadic" apply --no-packages "file://$config_remote"
+  [ "$status" -eq 0 ]
+  [ -f "$NOMADIC_DIR/config/modules/nvim/init.lua" ]
+}
+
 @test "integration: module with pkg directive does not cause unbound variable" {
   mkdir -p "$TEST_CONFIG/modules/tool"
   printf 'export TOOL="yes"\n' >"$TEST_CONFIG/modules/tool/bash"
@@ -95,7 +139,7 @@ run_shell() {
   # Run apply with a pkg: directive. The bug was an unbound variable
   # reference that crashed when _mod_pkg was set but empty-ish.
   # --no-packages skips bulk install; we just need the script to not crash.
-  run env HOME="$HOME" NOMADIC_DIR="$NOMADIC_DIR" \
+  run env HOME="$HOME" NOMADIC_HOME="$NOMADIC_DIR" \
     "$NOMADIC_ROOT/nomadic" apply --no-packages "$TEST_CONFIG"
   [ "$status" -eq 0 ]
   [[ "$output" != *"unbound variable"* ]]
