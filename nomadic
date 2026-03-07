@@ -446,7 +446,61 @@ generate_rc() {
     echo "export PATH=\"\$HOME/.local/bin:\$PATH\""
     echo ""
     cat
+    echo ""
+    generate_update_hook
   } >"$rc_file"
+}
+
+# Emit shell snippet that checks for nomadic updates once a day.
+# On shell load:
+#   1. If a previous background check left a message, print and clear it
+#   2. If the last check was >24h ago, spawn a background check
+# The background check writes a notice file if a newer version exists.
+generate_update_hook() {
+  local state_dir="$NOMADIC_DIR/state"
+  local repo_url="https://github.com/${NOMADIC_REPO}.git"
+  cat <<'HOOK'
+# --- nomadic update check ---
+_nomadic_update_check() {
+HOOK
+  cat <<HOOK
+  local state_dir="${state_dir}"
+  local repo_url="${repo_url}"
+  local current="${NOMADIC_VERSION}"
+HOOK
+  cat <<'HOOK'
+  local notice="$state_dir/update-notice"
+  local stamp="$state_dir/update-stamp"
+
+  # Show and clear any pending notice from a previous background check
+  if [[ -f "$notice" ]]; then
+    cat "$notice"
+    rm -f "$notice"
+  fi
+
+  # Check at most once per day (86400 seconds)
+  local now last=0
+  now="$(date +%s)"
+  [[ -f "$stamp" ]] && last="$(cat "$stamp")"
+  if (( now - last < 86400 )); then
+    return 0
+  fi
+
+  # Background check: query git remote, write notice if newer version exists
+  (
+    mkdir -p "$state_dir"
+    echo "$now" >"$stamp"
+    latest="$(git ls-remote --tags "$repo_url" 'v*' 2>/dev/null \
+      | sed 's|.*/v||; s/\^{}$//' | sort -V | tail -1)"
+    if [[ -n "$latest" && "$latest" != "$current" ]]; then
+      printf '[nomadic] Update available: v%s -> v%s (run "nomadic update")\n' \
+        "$current" "$latest" >"$notice"
+    fi
+  ) &>/dev/null &
+  disown 2>/dev/null
+}
+_nomadic_update_check
+HOOK
 }
 
 # Add a source line to the user's shell rc file.
