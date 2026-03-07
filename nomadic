@@ -913,12 +913,7 @@ cmd_apply() {
   if [[ -n "$config_dir" ]] && is_git_url "$config_dir"; then
     config_dir="$(sync_config_repo "$config_dir")"
   elif [[ -z "$config_dir" ]]; then
-    local remembered="$NOMADIC_DIR/state/config-path"
-    if [[ -f "$remembered" ]]; then
-      config_dir="$(cat "$remembered")"
-    else
-      config_dir="$NOMADIC_DIR/config"
-    fi
+    config_dir="$(resolve_config_dir)"
   fi
 
   if [[ ! -d "$config_dir/modules" ]]; then
@@ -1031,6 +1026,16 @@ cmd_apply() {
   fi
 
   log "Done!"
+}
+
+# Resolve the config directory from remembered state or default.
+resolve_config_dir() {
+  local remembered="$NOMADIC_DIR/state/config-path"
+  if [[ -f "$remembered" ]]; then
+    cat "$remembered"
+  else
+    echo "$NOMADIC_DIR/config"
+  fi
 }
 
 # --- Help & Version -----------------------------------------------------------
