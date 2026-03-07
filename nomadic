@@ -1025,6 +1025,8 @@ cmd_apply() {
     install_all_packages "$config_dir" "$current_os"
   fi
 
+  check_config_drift "$config_dir" || true
+
   log "Done!"
 }
 
