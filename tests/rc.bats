@@ -69,3 +69,30 @@ teardown() {
   grep -q 'existing_line' "$HOME/.bashrc"
   grep -q 'NOMADIC_MANAGED' "$HOME/.bashrc"
 }
+
+@test "infect_rc: creates bash_profile for login shells" {
+  infect_rc "bash"
+  [ -f "$HOME/.bash_profile" ]
+  grep -q 'NOMADIC_MANAGED' "$HOME/.bash_profile"
+  grep -q "source $NOMADIC_DIR/config.bash" "$HOME/.bash_profile"
+}
+
+@test "infect_rc: infects existing bash_profile" {
+  printf 'existing_profile\n' >"$HOME/.bash_profile"
+  infect_rc "bash"
+  grep -q 'existing_profile' "$HOME/.bash_profile"
+  grep -q 'NOMADIC_MANAGED' "$HOME/.bash_profile"
+}
+
+@test "infect_rc: bash_profile is idempotent" {
+  infect_rc "bash"
+  infect_rc "bash"
+  local count
+  count="$(grep -c 'NOMADIC_MANAGED' "$HOME/.bash_profile")"
+  [ "$count" -eq 1 ]
+}
+
+@test "infect_rc: does not create bash_profile for zsh" {
+  infect_rc "zsh"
+  [ ! -f "$HOME/.bash_profile" ]
+}
