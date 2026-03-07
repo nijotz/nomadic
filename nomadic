@@ -482,22 +482,26 @@ infect_rc() {
   local shell="$1"
   local rc_file
 
+  local -a rc_files=()
+
   case "$shell" in
-    bash) rc_file="$HOME/.bashrc" ;;
-    zsh) rc_file="$HOME/.zshrc" ;;
-    fish) rc_file="${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/nomadic.fish" ;;
+    bash) rc_files=("$HOME/.bashrc" "$HOME/.bash_profile") ;;
+    zsh) rc_files=("$HOME/.zshrc") ;;
+    fish) rc_files=("${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/nomadic.fish") ;;
     *) error "Unknown shell: $shell" ;;
   esac
 
-  # Already infected - nothing to do
-  if [[ -f "$rc_file" ]] && grep -q '# NOMADIC_MANAGED' "$rc_file"; then
-    return 0
-  fi
-
-  mkdir -p "$(dirname "$rc_file")"
-
   local source_line="source $NOMADIC_DIR/config.$shell  # NOMADIC_MANAGED"
-  echo "$source_line" >>"$rc_file"
+
+  for rc_file in "${rc_files[@]}"; do
+    # Already infected - skip
+    if [[ -f "$rc_file" ]] && grep -q '# NOMADIC_MANAGED' "$rc_file"; then
+      continue
+    fi
+
+    mkdir -p "$(dirname "$rc_file")"
+    echo "$source_line" >>"$rc_file"
+  done
 }
 
 # --- Package Management ------------------------------------------------------
