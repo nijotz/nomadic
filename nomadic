@@ -864,7 +864,7 @@ README
 # Check if a string looks like a git URL.
 is_git_url() {
   case "$1" in
-    https://*|git@*|ssh://*|git://*) return 0 ;;
+    https://* | git@* | ssh://* | git://*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -902,8 +902,8 @@ cmd_apply() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --no-packages|-P) skip_packages=1 ;;
-      --force|-f) force_links=1 ;;
+      --no-packages | -P) skip_packages=1 ;;
+      --force | -f) force_links=1 ;;
       *) config_dir="$1" ;;
     esac
     shift
@@ -1045,8 +1045,8 @@ check_config_drift() {
   local drift=0
 
   # Uncommitted changes (staged or unstaged)
-  if ! git -C "$config_dir" diff --quiet 2>/dev/null || \
-     ! git -C "$config_dir" diff --cached --quiet 2>/dev/null; then
+  if ! git -C "$config_dir" diff --quiet 2>/dev/null \
+    || ! git -C "$config_dir" diff --cached --quiet 2>/dev/null; then
     warn "Config has uncommitted changes: $config_dir"
     drift=1
   fi
@@ -1147,6 +1147,143 @@ cmd_status() {
   fi
 }
 
+# --- Doctor -------------------------------------------------------------------
+
+# Verify symlinks declared in a module's links file are intact.
+# Returns 0 if all good, 1 if any issues found.
+check_links() {
+  local config_dir="$1"
+  local issues=0
+
+  local -a modules=()
+  while IFS= read -r mod; do
+    modules+=("$mod")
+  done < <(discover_modules "$config_dir")
+
+  for mod in "${modules[@]}"; do
+    local links_file="$config_dir/modules/$mod/links"
+    local module_dir="$config_dir/modules/$mod"
+
+    [[ -f "$links_file" ]] || continue
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line="$(trim_comment "$line")"
+      line="$(trim "$line")"
+      [[ -z "$line" ]] && continue
+
+      local src tgt
+      read -r src tgt <<<"$line"
+      src="$module_dir/$src"
+      tgt="${tgt/#\~/$HOME}"
+
+      if [[ ! -L "$tgt" ]]; then
+        if [[ -e "$tgt" ]]; then
+          warn "$mod: $tgt exists but is not a symlink"
+        else
+          warn "$mod: $tgt is missing"
+        fi
+        ((issues += 1))
+      elif [[ "$(readlink "$tgt")" != "$src" ]]; then
+        warn "$mod: $tgt points to $(readlink "$tgt"), expected $src"
+        ((issues += 1))
+      fi
+    done <"$links_file"
+  done
+
+  if ((issues > 0)); then
+    warn "$issues broken symlink(s)"
+  fi
+  return $((issues > 0 ? 1 : 0))
+}
+
+# Validate deps: check for unknown after: targets and dependency cycles.
+# Returns 0 if all good, 1 if any issues found.
+check_deps() {
+  local config_dir="$1"
+  local issues=0
+
+  local -a all_modules=()
+  while IFS= read -r mod; do
+    all_modules+=("$mod")
+  done < <(discover_modules "$config_dir")
+
+  if ((${#all_modules[@]} == 0)); then
+    warn "No modules found"
+    return 1
+  fi
+
+  log "Found ${#all_modules[@]} module(s)"
+  load_module_deps "$config_dir" "${all_modules[@]}"
+
+  local i
+  for ((i = 0; i < ${#_mod_name[@]}; i++)); do
+    local after="${_mod_after[$i]}"
+    if [[ -n "$after" ]]; then
+      for dep in $after; do
+        if ! index_of "$dep" "${_mod_name[@]}" >/dev/null 2>&1; then
+          warn "Module '${_mod_name[$i]}' depends on unknown module '$dep'"
+          ((issues += 1))
+        fi
+      done
+    fi
+  done
+
+  if ! toposort >/dev/null 2>&1; then
+    warn "Dependency cycle detected"
+    ((issues += 1))
+  fi
+
+  return $((issues > 0 ? 1 : 0))
+}
+
+# Check that the generated RC file exists and the shell rc sources it.
+# Returns 0 if all good, 1 if any issues found.
+check_rc() {
+  local issues=0
+
+  if [[ -f "$NOMADIC_DIR/config.bash" ]]; then
+    log "RC file: $NOMADIC_DIR/config.bash"
+  else
+    warn "No generated RC file found at $NOMADIC_DIR/config.bash"
+    ((issues += 1))
+  fi
+
+  if [[ -f "$HOME/.bashrc" ]] && grep -q '# NOMADIC_MANAGED' "$HOME/.bashrc"; then
+    log "Shell: .bashrc is sourcing nomadic"
+  else
+    warn ".bashrc is not sourcing nomadic (run nomadic apply)"
+    ((issues += 1))
+  fi
+
+  return $((issues > 0 ? 1 : 0))
+}
+
+cmd_doctor() {
+  local config_dir="${1:-$(resolve_config_dir)}"
+  local issues=0
+
+  if [[ ! -d "$config_dir" ]]; then
+    error "Config directory not found: $config_dir"
+  fi
+  if [[ ! -d "$config_dir/modules" ]]; then
+    error "No modules directory at $config_dir/modules"
+  fi
+  log "Config: $config_dir"
+
+  check_deps "$config_dir" || ((issues += 1))
+  check_links "$config_dir" || ((issues += 1))
+  check_rc || ((issues += 1))
+  check_config_drift "$config_dir" || ((issues += 1))
+
+  if ((issues == 0)); then
+    log "Everything looks good!"
+  else
+    log "$issues issue(s) found"
+  fi
+
+  return $((issues > 0 ? 1 : 0))
+}
+
 # --- Help & Version -----------------------------------------------------------
 
 usage() {
@@ -1163,6 +1300,7 @@ Commands:
                          -f, --force        Overwrite existing files when linking (backs up originals)
   status [path]        Check config for uncommitted changes, unpushed/behind remote
   update               Update nomadic to the latest version from GitHub
+  doctor [path]        Validate config, check symlinks, deps, and drift
   help                 Show this help
   version              Show version
 
@@ -1184,6 +1322,7 @@ main() {
     apply) cmd_apply "$@" ;;
     status) cmd_status "$@" ;;
     update) cmd_update "$@" ;;
+    doctor) cmd_doctor "$@" ;;
     version | --version | -v) version ;;
     help | --help | -h | "") usage ;;
     *) error "Unknown command: $cmd" ;;
