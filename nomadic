@@ -864,7 +864,7 @@ README
 # Check if a string looks like a git URL.
 is_git_url() {
   case "$1" in
-    https://* | git@* | ssh://* | git://*) return 0 ;;
+    https://* | git@* | ssh://* | git://* | file://*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -881,13 +881,13 @@ sync_config_repo() {
       error "Config repo at $repo_dir points to $existing_url, not $url"
     fi
     log "Updating config repo..."
-    if ! git -C "$repo_dir" pull --ff-only; then
+    if ! git -C "$repo_dir" pull --ff-only >&2; then
       error "Could not fast-forward config repo. Resolve manually: cd $repo_dir && git pull"
     fi
-    git -C "$repo_dir" submodule update --init --recursive
+    git -C "$repo_dir" submodule update --init --recursive >&2
   else
     log "Cloning config repo..."
-    git clone --recurse-submodules "$url" "$repo_dir"
+    git clone --recurse-submodules "$url" "$repo_dir" >&2
   fi
 
   echo "$repo_dir"
