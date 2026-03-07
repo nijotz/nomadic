@@ -29,6 +29,7 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
 
   if [[ -f "$HOME/.bashrc" ]] || [[ "$(basename "$SHELL")" == "bash" ]]; then
     add_to_rc "$HOME/.bashrc"
+    add_to_rc "$HOME/.bash_profile"
   fi
 
   if [[ -f "$HOME/.zshrc" ]] || [[ "$(basename "$SHELL")" == "zsh" ]]; then
