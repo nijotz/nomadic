@@ -96,3 +96,36 @@ teardown() {
   infect_rc "zsh"
   [ ! -f "$HOME/.bash_profile" ]
 }
+
+@test "generate_rc: includes update check hook" {
+  echo "content" | generate_rc "bash"
+  grep -q '_nomadic_update_check' "$NOMADIC_DIR/config.bash"
+}
+
+@test "generate_rc: update hook embeds current version" {
+  echo "content" | generate_rc "bash"
+  grep -q "local current=\"$NOMADIC_VERSION\"" "$NOMADIC_DIR/config.bash"
+}
+
+@test "generate_rc: update hook shows and clears notice file" {
+  echo "content" | generate_rc "bash"
+  mkdir -p "$NOMADIC_DIR/state"
+  echo '[nomadic] Update available: v0.3.0 -> v0.4.0 (run "nomadic update")' \
+    >"$NOMADIC_DIR/state/update-notice"
+
+  # Source the generated rc and capture output
+  result="$(bash -c "source '$NOMADIC_DIR/config.bash'" 2>/dev/null)"
+  [[ "$result" == *"Update available"* ]]
+  [ ! -f "$NOMADIC_DIR/state/update-notice" ]
+}
+
+@test "generate_rc: update hook skips check within 24h" {
+  echo "content" | generate_rc "bash"
+  mkdir -p "$NOMADIC_DIR/state"
+  # Stamp is recent — should not spawn a background check
+  date +%s >"$NOMADIC_DIR/state/update-stamp"
+
+  bash -c "source '$NOMADIC_DIR/config.bash'" 2>/dev/null
+  # No notice file should be created (no check was run)
+  [ ! -f "$NOMADIC_DIR/state/update-notice" ]
+}
