@@ -1094,6 +1094,45 @@ resolve_config_dir() {
   fi
 }
 
+NOMADIC_REPO="nijotz/nomadic"
+
+cmd_update() {
+  local nomadic_self
+  nomadic_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+  # Get latest version tag from GitHub
+  log "Checking for updates..."
+  # git ls-remote outputs lines like:
+  #   abc123  refs/tags/v0.1.0
+  #   def456  refs/tags/v0.1.0^{}    (^{} = dereferenced tag)
+  # Strip everything up to "v" to get the version, remove ^{} suffix,
+  # then sort by version number and take the highest.
+  local latest
+  latest="$(git ls-remote --tags "https://github.com/$NOMADIC_REPO.git" 'v*' 2>/dev/null \
+    | sed 's|.*/v||; s/\^{}$//' | sort -V | tail -1)"
+
+  if [[ -z "$latest" ]]; then
+    error "Could not fetch version info from GitHub"
+  fi
+
+  if [[ "$NOMADIC_VERSION" == "$latest" ]]; then
+    log "Already up to date (v$NOMADIC_VERSION)"
+    return 0
+  fi
+
+  log "Updating v$NOMADIC_VERSION -> v$latest"
+
+  local url="https://raw.githubusercontent.com/$NOMADIC_REPO/v$latest/nomadic"
+  if ! curl -fsSL "$url" -o "$nomadic_self.tmp"; then
+    rm -f "$nomadic_self.tmp"
+    error "Failed to download v$latest"
+  fi
+
+  chmod +x "$nomadic_self.tmp"
+  mv "$nomadic_self.tmp" "$nomadic_self"
+  log "Updated to v$latest"
+}
+
 cmd_status() {
   local config_dir="${1:-$(resolve_config_dir)}"
 
@@ -1123,6 +1162,7 @@ Commands:
                          -P, --no-packages  Skip bulk package install
                          -f, --force        Overwrite existing files when linking (backs up originals)
   status [path]        Check config for uncommitted changes, unpushed/behind remote
+  update               Update nomadic to the latest version from GitHub
   help                 Show this help
   version              Show version
 
@@ -1143,6 +1183,7 @@ main() {
     init) cmd_init "$@" ;;
     apply) cmd_apply "$@" ;;
     status) cmd_status "$@" ;;
+    update) cmd_update "$@" ;;
     version | --version | -v) version ;;
     help | --help | -h | "") usage ;;
     *) error "Unknown command: $cmd" ;;
