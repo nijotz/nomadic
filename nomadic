@@ -909,9 +909,10 @@ sync_config_repo() {
     fi
     log "Updating config repo..."
     git -C "$repo_dir" pull --ff-only
+    git -C "$repo_dir" submodule update --init --recursive
   else
     log "Cloning config repo..."
-    git clone "$url" "$repo_dir"
+    git clone --recurse-submodules "$url" "$repo_dir"
   fi
 
   echo "$repo_dir"
