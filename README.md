@@ -81,7 +81,6 @@ my-config/
 ```
 after: homebrew packages      # run after these modules
 pkg: gnu-sed neovim           # abstract package names
-cmd: gsed                     # required command (skip module if missing)
 os: macos                     # only on these OSes (macos, ubuntu, arch, linux)
 ```
 
