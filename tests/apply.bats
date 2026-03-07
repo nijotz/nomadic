@@ -103,6 +103,46 @@ teardown() {
   [[ "$output" != *"unbound variable"* ]]
 }
 
+@test "apply: --help shows usage" {
+  run main apply --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"nomadic"* ]]
+}
+
+@test "apply: rejects unknown long flag" {
+  create_module "mymod"
+  printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
+
+  run cmd_apply --bogus "$TEST_CONFIG"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Unknown option: --bogus"* ]]
+}
+
+@test "apply: rejects unknown short flag" {
+  create_module "mymod"
+  printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
+
+  run cmd_apply -x "$TEST_CONFIG"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Unknown option: -x"* ]]
+}
+
+@test "apply: combined short flags work" {
+  create_module "mymod"
+  printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
+
+  cmd_apply -fPL "$TEST_CONFIG"
+
+  [ -f "$NOMADIC_DIR/config.bash" ]
+  grep -q 'export FOO="bar"' "$NOMADIC_DIR/config.bash"
+}
+
+@test "apply: combined flags reject unknown flag" {
+  run cmd_apply -fPx "$TEST_CONFIG"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Unknown option: -x"* ]]
+}
+
 @test "apply: remembers config path" {
   create_module "mymod"
   printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
