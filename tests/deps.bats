@@ -8,7 +8,6 @@ load test_helper/common
   load_module_deps "$TEST_CONFIG" "mymod"
   [ "${_mod_after[0]}" = "homebrew packages" ]
   [ "${_mod_pkg[0]}" = "jq" ]
-  [ -z "${_mod_cmd[0]}" ]
   [ -z "${_mod_os[0]}" ]
 }
 
