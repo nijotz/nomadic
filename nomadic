@@ -534,11 +534,11 @@ infect_rc() {
 # --- Package Management ------------------------------------------------------
 
 # Detect which package manager is available.
-# Checks in priority order: brew > apt > pacman.
+# Checks in priority order: brew > nix > apt > pacman.
 # Outputs the name and returns 0, or returns 1 if none found.
 detect_pkg_manager() {
   local mgr
-  for mgr in brew apt pacman; do
+  for mgr in brew nix apt pacman; do
     if command -v "$mgr" &>/dev/null; then
       echo "$mgr"
       return 0
@@ -650,6 +650,7 @@ install_packages() {
         fi
       fi
       ;;
+    nix) nix profile install "${@/#/nixpkgs#}" ;;
     apt) sudo apt install -y "$@" ;;
     pacman) sudo pacman -S --noconfirm "$@" ;;
     *) error "Unknown package manager: $pkg_manager" ;;
@@ -671,6 +672,13 @@ snapshot_installed_packages() {
     brew)
       _installed_pkgs="$(brew list --formula -1 2>/dev/null)"
       _installed_casks="$(brew list --cask -1 2>/dev/null)"
+      ;;
+    nix)
+      if ! nix profile list &>/dev/null; then
+        error "nix detected but 'nix profile' is not available. Enable it by adding to /etc/nix/nix.conf or ~/.config/nix/nix.conf:
+  experimental-features = nix-command flakes"
+      fi
+      _installed_pkgs="$(nix profile list 2>/dev/null | sed -n 's/.*nixpkgs#\([^ ]*\).*/\1/p')"
       ;;
     apt) _installed_pkgs="$(dpkg-query -W -f '${Package}\n' 2>/dev/null)" ;;
     pacman) _installed_pkgs="$(pacman -Qq 2>/dev/null)" ;;
