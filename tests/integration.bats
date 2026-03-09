@@ -37,7 +37,7 @@ run_shell() {
   # Add a test variable to one of the init-created modules
   printf 'export NOMADIC_TEST_VAR="hello"\n' >>"$TEST_CONFIG/modules/path/bash"
 
-  run_nomadic apply "$TEST_CONFIG"
+  run_nomadic apply -P "$TEST_CONFIG"
 
   # Verify a new shell sees the variable
   result="$(run_shell 'echo $NOMADIC_TEST_VAR')"
@@ -50,7 +50,7 @@ run_shell() {
   printf 'export BETA="two"\n' >"$TEST_CONFIG/modules/beta/bash"
   printf 'alpha\nbeta\n' >"$TEST_CONFIG/profiles/default"
 
-  run_nomadic apply "$TEST_CONFIG"
+  run_nomadic apply -P "$TEST_CONFIG"
 
   result="$(run_shell 'echo ${ALPHA}-${BETA}')"
   [ "$result" = "one-two" ]
@@ -63,7 +63,7 @@ run_shell() {
   printf 'export DOTS="yes"\n' >"$TEST_CONFIG/modules/dotfiles/bash"
   printf 'dotfiles\n' >"$TEST_CONFIG/profiles/default"
 
-  run_nomadic apply "$TEST_CONFIG"
+  run_nomadic apply -P "$TEST_CONFIG"
 
   # Symlink exists
   [ -L "$HOME/.myrc" ]
@@ -80,7 +80,7 @@ run_shell() {
   printf 'export APP="${BASE}:app"\n' >"$TEST_CONFIG/modules/app/bash"
   printf 'base\napp\n' >"$TEST_CONFIG/profiles/default"
 
-  run_nomadic apply "$TEST_CONFIG"
+  run_nomadic apply -P "$TEST_CONFIG"
 
   result="$(run_shell 'echo $APP')"
   [ "$result" = "loaded:app" ]

@@ -11,10 +11,14 @@ setup() {
   ORIG_HOME="$HOME"
   HOME="$TEST_DIR/home"
   mkdir -p "$HOME"
+  # Stub out package manager so tests don't hit the real one
+  detect_pkg_manager() { return 1; }
+  export -f detect_pkg_manager
 }
 
 teardown() {
   HOME="$ORIG_HOME"
+  unset -f detect_pkg_manager
   rm -rf "$TEST_DIR"
 }
 
@@ -98,7 +102,7 @@ teardown() {
   printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
 
   run env HOME="$HOME" NOMADIC_DIR="$NOMADIC_DIR" \
-    "$NOMADIC_ROOT/nomadic" apply "$TEST_CONFIG"
+    "$NOMADIC_ROOT/nomadic" apply -P "$TEST_CONFIG"
   [ "$status" -eq 0 ]
   [[ "$output" != *"unbound variable"* ]]
 }

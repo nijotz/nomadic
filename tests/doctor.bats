@@ -165,9 +165,19 @@ STUB
   echo "generated" >"$NOMADIC_DIR/config.bash"
   echo "source $NOMADIC_DIR/config.bash  # NOMADIC_MANAGED" >"$HOME/.bashrc"
 
+  # Stub out detect_pkg_manager so check_pkg_manager doesn't hit real nix
+  local stub_dir="$TEST_DIR/stub"
+  mkdir -p "$stub_dir"
+  printf '#!/usr/bin/env bash\nexit 1\n' >"$stub_dir/detect_pkg_manager"
+
+  detect_pkg_manager() { echo "apt"; }
+  export -f detect_pkg_manager
+
   run cmd_doctor "$TEST_CONFIG"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Everything looks good"* ]]
+
+  unset -f detect_pkg_manager
 }
 
 @test "cmd_doctor: reports issues" {
