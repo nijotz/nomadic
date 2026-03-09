@@ -1041,7 +1041,9 @@ cmd_apply() {
   command -v zsh &>/dev/null && has_zsh=1
 
   # Snapshot installed packages once so per-module installs can check quickly
-  snapshot_installed_packages
+  if ! ((skip_packages)); then
+    snapshot_installed_packages
+  fi
 
   # Temp files for accumulating shell config
   local rc_bash rc_fish rc_zsh
@@ -1052,7 +1054,9 @@ cmd_apply() {
 
   # Process each module in dependency order
   for mod in "${filtered[@]}"; do
-    install_module_packages "$config_dir" "$mod"
+    if ! ((skip_packages)); then
+      install_module_packages "$config_dir" "$mod"
+    fi
 
     log "Applying module: $mod"
 
