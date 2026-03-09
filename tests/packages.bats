@@ -147,6 +147,35 @@ EOF
   unset -f brew
 }
 
+@test "install_packages prefixes nixpkgs# for nix" {
+  local -a nix_calls=()
+  nix() { nix_calls+=("$*"); }
+  export -f nix
+
+  install_packages nix htop jq curl
+
+  [ "${#nix_calls[@]}" -eq 1 ]
+  [ "${nix_calls[0]}" = "profile install nixpkgs#htop nixpkgs#jq nixpkgs#curl" ]
+
+  unset -f nix
+}
+
+@test "snapshot_installed_packages errors when nix lacks nix-command" {
+  # Stub nix to exist but fail on 'profile list'
+  local stub_dir="$TEST_DIR/stub"
+  mkdir -p "$stub_dir"
+  cat >"$stub_dir/nix" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+  chmod +x "$stub_dir/nix"
+
+  PATH="$stub_dir" run snapshot_installed_packages
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"nix detected but"* ]]
+  [[ "$output" == *"experimental-features"* ]]
+}
+
 @test "resolve_packages handles comments and blank lines in map file" {
   local map_file="$TEST_DIR/apt.map"
   cat >"$map_file" <<'EOF'
