@@ -130,6 +130,32 @@ teardown() {
   [[ "$output" == *"not sourcing nomadic"* ]]
 }
 
+# --- check_pkg_manager --------------------------------------------------------
+
+@test "check_pkg_manager: warns when no package manager found" {
+  PATH="/nonexistent" run check_pkg_manager
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"No package manager detected"* ]]
+}
+
+@test "check_pkg_manager: warns when nix lacks nix-command feature" {
+  # Stub nix to exist but fail on 'profile list'
+  local stub_dir="$TEST_DIR/stub"
+  mkdir -p "$stub_dir"
+  cat >"$stub_dir/nix" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == "profile" ]]; then
+  exit 1
+fi
+STUB
+  chmod +x "$stub_dir/nix"
+
+  PATH="$stub_dir" run check_pkg_manager
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"nix detected but"* ]]
+  [[ "$output" == *"experimental-features"* ]]
+}
+
 # --- cmd_doctor ---------------------------------------------------------------
 
 @test "cmd_doctor: reports all good on healthy config" {
