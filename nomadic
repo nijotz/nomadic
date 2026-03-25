@@ -6,7 +6,7 @@ set -euo pipefail
 NOMADIC_VERSION="0.3.0"
 NOMADIC_DIR="${NOMADIC_HOME:-$HOME/.nomadic}"
 
-# Global parallel arrays, populated by load_module_deps. All share the same
+# Global parallel arrays, populated by load_modules. All share the same
 # index. Use parallel indexed arrays instead of associative arrays for bash 3.2
 # compatibility, which is the macOS default.
 _mod_name=()
@@ -121,7 +121,7 @@ discover_modules() {
 #   _mod_after[i] = "after:" value (space-separated module names)
 #   _mod_pkg[i]   = "pkg:" value (space-separated package names)
 #   _mod_os[i]    = "os:" value
-load_module_deps() {
+load_modules() {
   local config_dir="$1"
   shift
 
@@ -157,7 +157,7 @@ load_module_deps() {
 }
 
 # Filter a list of module names by OS compatibility.
-# Reads _mod_os[] from globals (populated by load_module_deps).
+# Reads _mod_os[] from globals (populated by load_modules).
 # Modules with no os: constraint pass on any OS. "linux" in a module's
 # os: field matches ubuntu, arch, debian, etc.
 filter_by_os() {
@@ -314,7 +314,7 @@ collect_shell_config() {
 
 # Topological sort using Kahn's algorithm (BFS-based).
 #
-# Reads from the global arrays populated by load_module_deps:
+# Reads from the global arrays populated by load_modules:
 #   _mod_name[]    - module names
 #   _mod_after[]  - each module's "after:" dependencies
 #
@@ -1020,7 +1020,7 @@ cmd_apply() {
   fi
 
   # Load deps and sort
-  load_module_deps "$config_dir" "${all_modules[@]}"
+  load_modules "$config_dir" "${all_modules[@]}"
   local -a ordered=()
   while IFS= read -r mod; do
     ordered+=("$mod")
@@ -1112,6 +1112,7 @@ cmd_apply() {
     log "Skipping package install (--no-packages)"
   else
     log "Installing packages..."
+    load_modules "$config_dir" "${filtered[@]}"
     install_all_packages "$config_dir" "$current_os"
   fi
 
@@ -1303,7 +1304,7 @@ check_deps() {
   fi
 
   log "Found ${#all_modules[@]} module(s)"
-  load_module_deps "$config_dir" "${all_modules[@]}"
+  load_modules "$config_dir" "${all_modules[@]}"
 
   local i
   for ((i = 0; i < ${#_mod_name[@]}; i++)); do

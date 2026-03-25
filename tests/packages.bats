@@ -44,7 +44,7 @@ EOF
   create_module "tmux" "pkg: tmux"
   create_module "vim"
 
-  load_module_deps "$TEST_CONFIG" "git" "tmux" "vim"
+  load_modules "$TEST_CONFIG" "git" "tmux" "vim"
   run collect_packages
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "git" ]
@@ -56,7 +56,7 @@ EOF
   create_module "alpha" "pkg: jq curl"
   create_module "beta" "pkg: curl wget"
 
-  load_module_deps "$TEST_CONFIG" "alpha" "beta"
+  load_modules "$TEST_CONFIG" "alpha" "beta"
   run collect_packages
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "jq" ]
@@ -68,7 +68,7 @@ EOF
 @test "collect_packages splits space-separated values" {
   create_module "multi" "pkg: htop jq curl"
 
-  load_module_deps "$TEST_CONFIG" "multi"
+  load_modules "$TEST_CONFIG" "multi"
   run collect_packages
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "htop" ]

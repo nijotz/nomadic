@@ -32,6 +32,6 @@ create_module() {
 run_toposort() {
   local config_dir="$1"
   shift
-  load_module_deps "$config_dir" "$@"
+  load_modules "$config_dir" "$@"
   toposort
 }
