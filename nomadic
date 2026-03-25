@@ -692,7 +692,9 @@ snapshot_installed_packages() {
         error "nix detected but 'nix profile' is not available. Enable it by adding to /etc/nix/nix.conf or ~/.config/nix/nix.conf:
   experimental-features = nix-command flakes"
       fi
-      _installed_pkgs="$(nix profile list 2>/dev/null | sed -n 's/.*nixpkgs#\([^ ]*\).*/\1/p')"
+      # `nix profile list` prints package names in bold (e.g. "\e[1mfzf\e[0m")
+      # on Name: lines. Strip the ANSI escape sequences to get plain names.
+      _installed_pkgs="$(nix profile list 2>/dev/null | grep '^Name:' | sed 's/^Name:[[:space:]]*//' | sed $'s/\033\\[[0-9;]*m//g')"
       ;;
     apt) _installed_pkgs="$(dpkg-query -W -f '${Package}\n' 2>/dev/null)" ;;
     pacman) _installed_pkgs="$(pacman -Qq 2>/dev/null)" ;;
@@ -796,7 +798,18 @@ install_all_packages() {
     [[ -n "$pkg" ]] && resolved+=("$pkg")
   done < <(resolve_packages "$map_file" "${all_pkgs[@]}")
 
-  install_packages "$pkg_manager" "${resolved[@]}"
+  # Skip packages already installed (snapshot was taken earlier in cmd_apply)
+  local -a missing=()
+  local pkg
+  for pkg in "${resolved[@]}"; do
+    if ! is_pkg_installed "$pkg"; then
+      missing+=("$pkg")
+    fi
+  done
+
+  if ((${#missing[@]} > 0)); then
+    install_packages "$pkg_manager" "${missing[@]}"
+  fi
 }
 
 # --- Init ---------------------------------------------------------------------

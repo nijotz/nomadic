@@ -160,6 +160,27 @@ EOF
   unset -f nix
 }
 
+@test "snapshot_installed_packages parses nix profile list output" {
+  local stub_dir="$TEST_DIR/stub"
+  mkdir -p "$stub_dir"
+  # Simulate `nix profile list` output: Name: lines use ANSI bold
+  cat >"$stub_dir/nix" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "profile list" ]]; then
+  printf 'Name:               \033[1mfzf\033[0m\n'
+  printf 'Flake attribute:    legacyPackages.x86_64-linux.fzf\n'
+  printf '\n'
+  printf 'Name:               \033[1mgit\033[0m\n'
+  printf 'Flake attribute:    legacyPackages.x86_64-linux.git\n'
+fi
+STUB
+  chmod +x "$stub_dir/nix"
+
+  PATH="$stub_dir:$PATH" snapshot_installed_packages
+  [ "$(echo "$_installed_pkgs" | sed -n '1p')" = "fzf" ]
+  [ "$(echo "$_installed_pkgs" | sed -n '2p')" = "git" ]
+}
+
 @test "snapshot_installed_packages errors when nix lacks nix-command" {
   # Stub nix to exist but fail on 'profile list'
   local stub_dir="$TEST_DIR/stub"
@@ -170,7 +191,7 @@ exit 1
 STUB
   chmod +x "$stub_dir/nix"
 
-  PATH="$stub_dir" run snapshot_installed_packages
+  PATH="$stub_dir:$PATH" run snapshot_installed_packages
   [ "$status" -eq 1 ]
   [[ "$output" == *"nix detected but"* ]]
   [[ "$output" == *"experimental-features"* ]]
