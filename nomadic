@@ -7,8 +7,10 @@ NOMADIC_VERSION="0.3.0"
 NOMADIC_DIR="${NOMADIC_HOME:-$HOME/.nomadic}"
 
 # Global parallel arrays, populated by load_modules. All share the same
-# index. Use parallel indexed arrays instead of associative arrays for bash 3.2
-# compatibility, which is the macOS default.
+# index. Globals are used because bash has no clean way to pass arrays between
+# functions, and these arrays are shared by load_modules, filter_by_os,
+# toposort, and collect_packages. Use parallel indexed arrays instead of
+# associative arrays for bash 3.2 compatibility, which is the macOS default.
 _mod_name=()
 _mod_after=()
 _mod_pkg=()
@@ -156,47 +158,59 @@ load_modules() {
   done
 }
 
-# Filter a list of module names by OS compatibility.
-# Reads _mod_os[] from globals (populated by load_modules).
-# Modules with no os: constraint pass on any OS. "linux" in a module's
-# os: field matches ubuntu, arch, debian, etc.
+# Filter the global module arrays by OS compatibility, mutating them in place.
+# After this call, _mod_name[], _mod_after[], _mod_pkg[], and _mod_os[] only
+# contain entries for modules that apply to the given OS. This ensures that
+# toposort and collect_packages never see modules filtered out by OS.
+# Modules with no os: constraint pass on any OS. "linux" matches ubuntu, arch,
+# debian, etc.
 filter_by_os() {
   local os_name="$1"
-  shift
 
-  local mod
-  for mod in "$@"; do
-    local idx
-    if ! idx="$(index_of "$mod" "${_mod_name[@]}")"; then
-      continue
-    fi
-
-    local mod_os="${_mod_os[$idx]}"
+  local -a new_name=() new_after=() new_pkg=() new_os=()
+  local i
+  for ((i = 0; i < ${#_mod_name[@]}; i++)); do
+    local mod_os="${_mod_os[$i]}"
 
     # No OS constraint — passes on any OS
     if [[ -z "$mod_os" ]]; then
-      echo "$mod"
+      new_name+=("${_mod_name[$i]}")
+      new_after+=("${_mod_after[$i]}")
+      new_pkg+=("${_mod_pkg[$i]}")
+      new_os+=("${_mod_os[$i]}")
       continue
     fi
 
     # Check if current OS matches any listed OS
-    local os_item
+    local os_item matched=0
     for os_item in $mod_os; do
       if [[ "$os_item" == "$os_name" ]]; then
-        echo "$mod"
-        continue 2
+        matched=1
+        break
       fi
       # "linux" is a catch-all that matches any Linux distro
       if [[ "$os_item" == "linux" ]]; then
         case "$os_name" in
           ubuntu | arch | debian | manjaro | linux)
-            echo "$mod"
-            continue 3
+            matched=1
+            break
             ;;
         esac
       fi
     done
+
+    if ((matched)); then
+      new_name+=("${_mod_name[$i]}")
+      new_after+=("${_mod_after[$i]}")
+      new_pkg+=("${_mod_pkg[$i]}")
+      new_os+=("${_mod_os[$i]}")
+    fi
   done
+
+  _mod_name=("${new_name[@]+"${new_name[@]}"}")
+  _mod_after=("${new_after[@]+"${new_after[@]}"}")
+  _mod_pkg=("${new_pkg[@]+"${new_pkg[@]}"}")
+  _mod_os=("${new_os[@]+"${new_os[@]}"}")
 }
 
 # Source a module's setup script if present.
@@ -1019,20 +1033,17 @@ cmd_apply() {
     return 0
   fi
 
-  # Load deps and sort
-  load_modules "$config_dir" "${all_modules[@]}"
-  local -a ordered=()
-  while IFS= read -r mod; do
-    ordered+=("$mod")
-  done < <(toposort)
-
-  # Filter by OS
+  # Load deps, filter by OS (mutates globals), then sort.
+  # Filtering before toposort ensures OS-excluded modules never appear in
+  # package collection or dependency ordering.
   local current_os
   current_os="$(detect_os)"
+  load_modules "$config_dir" "${all_modules[@]}"
+  filter_by_os "$current_os"
   local -a filtered=()
   while IFS= read -r mod; do
     [[ -n "$mod" ]] && filtered+=("$mod")
-  done < <(filter_by_os "$current_os" "${ordered[@]}")
+  done < <(toposort)
 
   # Detect which shells are installed
   local has_bash=0 has_fish=0 has_zsh=0
@@ -1112,7 +1123,6 @@ cmd_apply() {
     log "Skipping package install (--no-packages)"
   else
     log "Installing packages..."
-    load_modules "$config_dir" "${filtered[@]}"
     install_all_packages "$config_dir" "$current_os"
   fi
 

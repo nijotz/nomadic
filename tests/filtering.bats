@@ -5,46 +5,54 @@ load test_helper/common
   create_module "alpha"
   load_modules "$TEST_CONFIG" "alpha"
 
-  result="$(filter_by_os "macos" "alpha")"
-  [ "$result" = "alpha" ]
+  filter_by_os "macos"
+  [ "${#_mod_name[@]}" -eq 1 ]
+  [ "${_mod_name[0]}" = "alpha" ]
 }
 
 @test "filter_by_os: module with matching os: passes" {
   create_module "brew" "os: macos"
   load_modules "$TEST_CONFIG" "brew"
 
-  result="$(filter_by_os "macos" "brew")"
-  [ "$result" = "brew" ]
+  filter_by_os "macos"
+  [ "${#_mod_name[@]}" -eq 1 ]
+  [ "${_mod_name[0]}" = "brew" ]
 }
 
 @test "filter_by_os: module with non-matching os: is filtered out" {
   create_module "brew" "os: macos"
   load_modules "$TEST_CONFIG" "brew"
 
-  result="$(filter_by_os "ubuntu" "brew")"
-  [ -z "$result" ]
+  filter_by_os "ubuntu"
+  [ "${#_mod_name[@]}" -eq 0 ]
 }
 
 @test "filter_by_os: module with multiple os: values" {
   create_module "mymod" "os: macos linux"
   load_modules "$TEST_CONFIG" "mymod"
 
-  result_mac="$(filter_by_os "macos" "mymod")"
-  result_ubu="$(filter_by_os "ubuntu" "mymod")"
-  [ "$result_mac" = "mymod" ]
-  [ "$result_ubu" = "mymod" ]
+  filter_by_os "macos"
+  [ "${#_mod_name[@]}" -eq 1 ]
+
+  load_modules "$TEST_CONFIG" "mymod"
+  filter_by_os "ubuntu"
+  [ "${#_mod_name[@]}" -eq 1 ]
 }
 
 @test "filter_by_os: linux matches ubuntu and arch" {
   create_module "mymod" "os: linux"
-  load_modules "$TEST_CONFIG" "mymod"
 
-  result_ubu="$(filter_by_os "ubuntu" "mymod")"
-  result_arch="$(filter_by_os "arch" "mymod")"
-  result_mac="$(filter_by_os "macos" "mymod")"
-  [ "$result_ubu" = "mymod" ]
-  [ "$result_arch" = "mymod" ]
-  [ -z "$result_mac" ]
+  load_modules "$TEST_CONFIG" "mymod"
+  filter_by_os "ubuntu"
+  [ "${#_mod_name[@]}" -eq 1 ]
+
+  load_modules "$TEST_CONFIG" "mymod"
+  filter_by_os "arch"
+  [ "${#_mod_name[@]}" -eq 1 ]
+
+  load_modules "$TEST_CONFIG" "mymod"
+  filter_by_os "macos"
+  [ "${#_mod_name[@]}" -eq 0 ]
 }
 
 @test "filter_by_os: filters multiple modules correctly" {
@@ -53,20 +61,31 @@ load test_helper/common
   create_module "apt" "os: ubuntu"
   load_modules "$TEST_CONFIG" "alpha" "brew" "apt"
 
-  result="$(filter_by_os "macos" "alpha" "brew" "apt")"
-  [ "$(echo "$result" | sed -n '1p')" = "alpha" ]
-  [ "$(echo "$result" | sed -n '2p')" = "brew" ]
-  [ "$(echo "$result" | wc -l | tr -d ' ')" = "2" ]
+  filter_by_os "macos"
+  [ "${#_mod_name[@]}" -eq 2 ]
+  [ "${_mod_name[0]}" = "alpha" ]
+  [ "${_mod_name[1]}" = "brew" ]
 }
 
-@test "filter_by_os: preserves input order" {
+@test "filter_by_os: preserves load order" {
   create_module "charlie"
   create_module "alpha"
   create_module "bravo"
   load_modules "$TEST_CONFIG" "charlie" "alpha" "bravo"
 
-  result="$(filter_by_os "macos" "charlie" "alpha" "bravo")"
-  [ "$(echo "$result" | sed -n '1p')" = "charlie" ]
-  [ "$(echo "$result" | sed -n '2p')" = "alpha" ]
-  [ "$(echo "$result" | sed -n '3p')" = "bravo" ]
+  filter_by_os "macos"
+  [ "${#_mod_name[@]}" -eq 3 ]
+  [ "${_mod_name[0]}" = "charlie" ]
+  [ "${_mod_name[1]}" = "alpha" ]
+  [ "${_mod_name[2]}" = "bravo" ]
+}
+
+@test "filter_by_os: also filters _mod_pkg globals" {
+  create_module "htop" "pkg: htop"
+  create_module "iterm2" "$(printf 'os: macos\npkg: iterm2')"
+  load_modules "$TEST_CONFIG" "htop" "iterm2"
+
+  filter_by_os "ubuntu"
+  [ "${#_mod_name[@]}" -eq 1 ]
+  [ "${_mod_pkg[0]}" = "htop" ]
 }
