@@ -223,3 +223,20 @@ EOF
   eval "$(declare -f orig_detect_pkg_manager | sed 's/orig_detect_pkg_manager/detect_pkg_manager/')"
   eval "$(declare -f orig_install_packages | sed 's/orig_install_packages/install_packages/')"
 }
+
+@test "collect_packages excludes packages from OS-filtered modules" {
+  # Reproduces a bug where packages from OS-filtered modules (e.g. iterm2 on
+  # a macOS-only module) leaked into collect_packages because load_modules was
+  # called with all modules before OS filtering, and filter_by_os didn't update
+  # the globals that collect_packages reads from.
+  create_module "htop" "pkg: htop"
+  create_module "iterm2" "$(printf 'os: macos\npkg: iterm2')"
+
+  load_modules "$TEST_CONFIG" "htop" "iterm2"
+  filter_by_os "ubuntu"
+
+  run collect_packages
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "htop" ]
+  [ "${#lines[@]}" -eq 1 ]
+}
