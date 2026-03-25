@@ -3,7 +3,7 @@ load test_helper/common
 
 @test "filter_by_os: module with no os: constraint passes on any OS" {
   create_module "alpha"
-  load_module_deps "$TEST_CONFIG" "alpha"
+  load_modules "$TEST_CONFIG" "alpha"
 
   result="$(filter_by_os "macos" "alpha")"
   [ "$result" = "alpha" ]
@@ -11,7 +11,7 @@ load test_helper/common
 
 @test "filter_by_os: module with matching os: passes" {
   create_module "brew" "os: macos"
-  load_module_deps "$TEST_CONFIG" "brew"
+  load_modules "$TEST_CONFIG" "brew"
 
   result="$(filter_by_os "macos" "brew")"
   [ "$result" = "brew" ]
@@ -19,7 +19,7 @@ load test_helper/common
 
 @test "filter_by_os: module with non-matching os: is filtered out" {
   create_module "brew" "os: macos"
-  load_module_deps "$TEST_CONFIG" "brew"
+  load_modules "$TEST_CONFIG" "brew"
 
   result="$(filter_by_os "ubuntu" "brew")"
   [ -z "$result" ]
@@ -27,7 +27,7 @@ load test_helper/common
 
 @test "filter_by_os: module with multiple os: values" {
   create_module "mymod" "os: macos linux"
-  load_module_deps "$TEST_CONFIG" "mymod"
+  load_modules "$TEST_CONFIG" "mymod"
 
   result_mac="$(filter_by_os "macos" "mymod")"
   result_ubu="$(filter_by_os "ubuntu" "mymod")"
@@ -37,7 +37,7 @@ load test_helper/common
 
 @test "filter_by_os: linux matches ubuntu and arch" {
   create_module "mymod" "os: linux"
-  load_module_deps "$TEST_CONFIG" "mymod"
+  load_modules "$TEST_CONFIG" "mymod"
 
   result_ubu="$(filter_by_os "ubuntu" "mymod")"
   result_arch="$(filter_by_os "arch" "mymod")"
@@ -51,7 +51,7 @@ load test_helper/common
   create_module "alpha"
   create_module "brew" "os: macos"
   create_module "apt" "os: ubuntu"
-  load_module_deps "$TEST_CONFIG" "alpha" "brew" "apt"
+  load_modules "$TEST_CONFIG" "alpha" "brew" "apt"
 
   result="$(filter_by_os "macos" "alpha" "brew" "apt")"
   [ "$(echo "$result" | sed -n '1p')" = "alpha" ]
@@ -63,7 +63,7 @@ load test_helper/common
   create_module "charlie"
   create_module "alpha"
   create_module "bravo"
-  load_module_deps "$TEST_CONFIG" "charlie" "alpha" "bravo"
+  load_modules "$TEST_CONFIG" "charlie" "alpha" "bravo"
 
   result="$(filter_by_os "macos" "charlie" "alpha" "bravo")"
   [ "$(echo "$result" | sed -n '1p')" = "charlie" ]
