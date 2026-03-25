@@ -155,7 +155,7 @@ EOF
   install_packages nix htop jq curl
 
   [ "${#nix_calls[@]}" -eq 1 ]
-  [ "${nix_calls[0]}" = "profile install nixpkgs#htop nixpkgs#jq nixpkgs#curl" ]
+  [ "${nix_calls[0]}" = "profile add nixpkgs#htop nixpkgs#jq nixpkgs#curl" ]
 
   unset -f nix
 }
