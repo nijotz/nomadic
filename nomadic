@@ -707,7 +707,8 @@ is_pkg_installed() {
   if [[ "$pkg" == cask:* ]]; then
     echo "$_installed_casks" | grep -qx "${pkg#cask:}"
   else
-    echo "$_installed_pkgs" | grep -qx "$pkg"
+    # Also matches versioned formulae (e.g. "python" matches "python@3.13")
+    echo "$_installed_pkgs" | grep -qxE "$pkg(@.*)?"
   fi
 }
 
