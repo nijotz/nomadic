@@ -664,7 +664,7 @@ install_packages() {
         fi
       fi
       ;;
-    nix) nix profile add "${@/#/nixpkgs#}" ;;
+    nix) nix profile install "${@/#/nixpkgs#}" ;;
     apt) sudo apt install -y "$@" ;;
     pacman) sudo pacman -S --noconfirm "$@" ;;
     *) error "Unknown package manager: $pkg_manager" ;;
