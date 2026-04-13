@@ -694,7 +694,7 @@ snapshot_installed_packages() {
       fi
       # `nix profile list` prints package names in bold (e.g. "\e[1mfzf\e[0m")
       # on Name: lines. Strip the ANSI escape sequences to get plain names.
-      _installed_pkgs="$(nix profile list 2>/dev/null | grep '^Name:' | sed 's/^Name:[[:space:]]*//' | sed $'s/\033\\[[0-9;]*m//g')"
+      _installed_pkgs="$(nix profile list 2>/dev/null | grep '^Name:' | sed 's/^Name:[[:space:]]*//' | sed $'s/\033\\[[0-9;]*m//g' || true)"
       ;;
     apt) _installed_pkgs="$(dpkg-query -W -f '${Package}\n' 2>/dev/null)" ;;
     pacman) _installed_pkgs="$(pacman -Qq 2>/dev/null)" ;;
