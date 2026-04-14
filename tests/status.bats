@@ -8,6 +8,7 @@ setup() {
 
   # Create a git-backed config directory
   CONFIG_DIR="$TEST_DIR/config"
+  g_config_dir="$CONFIG_DIR"
   mkdir -p "$CONFIG_DIR/modules/test"
   printf 'export TEST="yes"\n' >"$CONFIG_DIR/modules/test/bash"
   git -C "$CONFIG_DIR" init 2>/dev/null
@@ -20,14 +21,13 @@ teardown() {
 }
 
 @test "check_config_drift: clean repo returns 0" {
-  run check_config_drift "$CONFIG_DIR"
+  run check_config_drift
   [ "$status" -eq 0 ]
 }
 
 @test "check_config_drift: uncommitted changes returns 1" {
   printf 'modified\n' >"$CONFIG_DIR/modules/test/bash"
-
-  run check_config_drift "$CONFIG_DIR"
+  run check_config_drift
   [ "$status" -eq 1 ]
   [[ "$output" == *"uncommitted changes"* ]]
 }
@@ -35,16 +35,14 @@ teardown() {
 @test "check_config_drift: staged changes returns 1" {
   printf 'modified\n' >"$CONFIG_DIR/modules/test/bash"
   git -C "$CONFIG_DIR" add -A
-
-  run check_config_drift "$CONFIG_DIR"
+  run check_config_drift
   [ "$status" -eq 1 ]
   [[ "$output" == *"uncommitted changes"* ]]
 }
 
 @test "check_config_drift: untracked files returns 1" {
   printf 'new file\n' >"$CONFIG_DIR/modules/test/newfile"
-
-  run check_config_drift "$CONFIG_DIR"
+  run check_config_drift
   [ "$status" -eq 1 ]
   [[ "$output" == *"untracked files"* ]]
 }
@@ -52,7 +50,6 @@ teardown() {
 @test "check_config_drift: non-git directory returns 0" {
   local plain_dir="$TEST_DIR/plain"
   mkdir -p "$plain_dir"
-
   run check_config_drift "$plain_dir"
   [ "$status" -eq 0 ]
 }
@@ -73,7 +70,7 @@ teardown() {
   git -C "$CONFIG_DIR" add -A
   git -C "$CONFIG_DIR" commit -m "local only" 2>/dev/null
 
-  run check_config_drift "$CONFIG_DIR"
+  run check_config_drift
   [ "$status" -eq 1 ]
   [[ "$output" == *"unpushed commit"* ]]
 }
@@ -96,7 +93,7 @@ teardown() {
   git -C "$other" commit -m "remote change" 2>/dev/null
   git -C "$other" push 2>/dev/null
 
-  run check_config_drift "$CONFIG_DIR"
+  run check_config_drift
   [ "$status" -eq 1 ]
   [[ "$output" == *"behind remote"* ]]
 }
@@ -109,7 +106,6 @@ teardown() {
 
 @test "cmd_status: reports dirty config" {
   printf 'modified\n' >"$CONFIG_DIR/modules/test/bash"
-
   run cmd_status "$CONFIG_DIR"
   [ "$status" -eq 0 ]
   [[ "$output" == *"uncommitted changes"* ]]

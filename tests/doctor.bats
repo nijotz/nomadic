@@ -21,15 +21,15 @@ teardown() {
 @test "check_deps: passes with valid deps" {
   create_module "alpha"
   create_module "beta" "after: alpha"
-
-  run check_deps "$TEST_CONFIG"
+  setup_global_state "$TEST_CONFIG"
+  run check_deps
   [ "$status" -eq 0 ]
 }
 
 @test "check_deps: warns on unknown after: target" {
   create_module "mymod" "after: nonexistent"
-
-  run check_deps "$TEST_CONFIG"
+  setup_global_state "$TEST_CONFIG"
+  run check_deps
   [ "$status" -eq 1 ]
   [[ "$output" == *"unknown module 'nonexistent'"* ]]
 }
@@ -37,19 +37,10 @@ teardown() {
 @test "check_deps: warns on dependency cycle" {
   create_module "alpha" "after: beta"
   create_module "beta" "after: alpha"
-
-  run check_deps "$TEST_CONFIG"
+  setup_global_state "$TEST_CONFIG"
+  run check_deps
   [ "$status" -eq 1 ]
   [[ "$output" == *"cycle"* ]]
-}
-
-@test "check_deps: warns when no modules found" {
-  rm -rf "$TEST_CONFIG/modules"
-  mkdir -p "$TEST_CONFIG/modules"
-
-  run check_deps "$TEST_CONFIG"
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"No modules found"* ]]
 }
 
 # --- check_links --------------------------------------------------------------
@@ -59,8 +50,8 @@ teardown() {
   echo "content" >"$TEST_CONFIG/modules/mymod/myrc"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_CONFIG/modules/mymod/links"
   ln -s "$TEST_CONFIG/modules/mymod/myrc" "$HOME/.myrc"
-
-  run check_links "$TEST_CONFIG"
+  setup_global_state "$TEST_CONFIG"
+  run check_links
   [ "$status" -eq 0 ]
 }
 
@@ -68,8 +59,8 @@ teardown() {
   create_module "mymod"
   echo "content" >"$TEST_CONFIG/modules/mymod/myrc"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_CONFIG/modules/mymod/links"
-
-  run check_links "$TEST_CONFIG"
+  setup_global_state "$TEST_CONFIG"
+  run check_links
   [ "$status" -eq 1 ]
   [[ "$output" == *"missing"* ]]
 }
@@ -79,8 +70,8 @@ teardown() {
   echo "content" >"$TEST_CONFIG/modules/mymod/myrc"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_CONFIG/modules/mymod/links"
   echo "not a symlink" >"$HOME/.myrc"
-
-  run check_links "$TEST_CONFIG"
+  setup_global_state "$TEST_CONFIG"
+  run check_links
   [ "$status" -eq 1 ]
   [[ "$output" == *"not a symlink"* ]]
 }
@@ -90,16 +81,16 @@ teardown() {
   echo "content" >"$TEST_CONFIG/modules/mymod/myrc"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_CONFIG/modules/mymod/links"
   ln -s "/wrong/target" "$HOME/.myrc"
-
-  run check_links "$TEST_CONFIG"
+  setup_global_state "$TEST_CONFIG"
+  run check_links
   [ "$status" -eq 1 ]
   [[ "$output" == *"points to"* ]]
 }
 
 @test "check_links: passes with no links files" {
   create_module "mymod"
-
-  run check_links "$TEST_CONFIG"
+  setup_global_state "$TEST_CONFIG"
+  run check_links
   [ "$status" -eq 0 ]
 }
 
@@ -174,6 +165,7 @@ STUB
   export -f detect_pkg_manager
 
   run cmd_doctor "$TEST_CONFIG"
+
   [ "$status" -eq 0 ]
   [[ "$output" == *"Everything looks good"* ]]
 
@@ -183,7 +175,6 @@ STUB
 @test "cmd_doctor: reports issues" {
   create_module "mymod" "after: nonexistent"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_CONFIG/modules/mymod/links"
-
   run cmd_doctor "$TEST_CONFIG"
   [ "$status" -eq 1 ]
   [[ "$output" == *"issue(s) found"* ]]

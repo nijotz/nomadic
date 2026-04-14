@@ -11,6 +11,7 @@ setup() {
   NOMADIC_DIR="$TEST_DIR/nomadic"
   mkdir -p "$TEST_CONFIG/modules"
   mkdir -p "$TEST_CONFIG/profiles"
+  g_config_dir="$TEST_CONFIG"
 }
 
 # Clean up after each test
@@ -30,8 +31,6 @@ create_module() {
 
 # Helper: load module deps and run toposort
 run_toposort() {
-  local config_dir="$1"
-  shift
-  load_modules "$config_dir" "$@"
+  load_modules
   toposort
 }

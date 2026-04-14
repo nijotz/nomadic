@@ -4,15 +4,14 @@ load test_helper/common
 @test "run_setup: sources setup script" {
   create_module "mymod"
   printf 'touch "%s/setup_ran"\n' "$TEST_DIR" >"$TEST_CONFIG/modules/mymod/setup"
-
-  run_setup "$TEST_CONFIG" "mymod"
+  run_setup "mymod"
   [ -f "$TEST_DIR/setup_ran" ]
 }
 
 @test "run_setup: missing setup file is a no-op" {
   create_module "mymod"
 
-  run run_setup "$TEST_CONFIG" "mymod"
+  run run_setup "mymod"
   [ "$status" -eq 0 ]
 }
 
@@ -20,7 +19,7 @@ load test_helper/common
   create_module "mymod"
   printf 'SETUP_TEST_VAR="hello_from_setup"\n' >"$TEST_CONFIG/modules/mymod/setup"
 
-  run_setup "$TEST_CONFIG" "mymod"
+  run_setup "mymod"
   [ "$SETUP_TEST_VAR" = "hello_from_setup" ]
 }
 
@@ -28,6 +27,6 @@ load test_helper/common
   create_module "mymod"
   printf 'false\n' >"$TEST_CONFIG/modules/mymod/setup"
 
-  run run_setup "$TEST_CONFIG" "mymod"
+  run run_setup "mymod"
   [ "$status" -ne 0 ]
 }

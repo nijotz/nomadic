@@ -5,7 +5,7 @@ load test_helper/common
   create_module "mymod"
   printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
 
-  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash")"
+  result="$(collect_shell_config "mymod" "bash")"
   echo "$result" | grep -q 'export FOO="bar"'
 }
 
@@ -14,14 +14,14 @@ load test_helper/common
   printf '#!/usr/bin/env bash\necho "export DYNAMIC=yes"\n' >"$TEST_CONFIG/modules/mymod/bash"
   chmod +x "$TEST_CONFIG/modules/mymod/bash"
 
-  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash")"
+  result="$(collect_shell_config "mymod" "bash")"
   echo "$result" | grep -q 'export DYNAMIC=yes'
 }
 
 @test "collect_shell_config: missing config file produces no output" {
   create_module "mymod"
 
-  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash")"
+  result="$(collect_shell_config "mymod" "bash")"
   [ -z "$result" ]
 }
 
@@ -29,7 +29,7 @@ load test_helper/common
   create_module "mymod"
   printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
 
-  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash")"
+  result="$(collect_shell_config "mymod" "bash")"
   echo "$result" | grep -q '# --- module: mymod -'
 }
 
@@ -40,7 +40,7 @@ load test_helper/common
   chmod +x "$TEST_CONFIG/modules/mymod/bash"
 
   # Capture stdout and stderr separately
-  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash" 2>/dev/null)"
+  result="$(collect_shell_config "mymod" "bash" 2>/dev/null)"
   echo "$result" | grep -q 'config line'
   ! echo "$result" | grep -q 'debug info'
 }
@@ -49,7 +49,7 @@ load test_helper/common
   create_module "mymod"
   printf 'export ZSH_THING="yes"\n' >"$TEST_CONFIG/modules/mymod/zsh"
 
-  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "zsh")"
+  result="$(collect_shell_config "mymod" "zsh")"
   echo "$result" | grep -q 'export ZSH_THING="yes"'
 }
 
@@ -57,8 +57,8 @@ load test_helper/common
   create_module "mymod"
   printf 'export GENERIC="yes"\n' >"$TEST_CONFIG/modules/mymod/bash"
   printf 'export MACOS="yes"\n' >"$TEST_CONFIG/modules/mymod/bash.macos"
-
-  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash" "macos")"
+  g_current_os='macos'
+  result="$(collect_shell_config "mymod" "bash" "macos")"
   echo "$result" | grep -q 'export MACOS="yes"'
   ! echo "$result" | grep -q 'export GENERIC="yes"'
 }
@@ -67,8 +67,8 @@ load test_helper/common
   create_module "mymod"
   printf 'export GENERIC="yes"\n' >"$TEST_CONFIG/modules/mymod/bash"
   printf 'export LINUX="yes"\n' >"$TEST_CONFIG/modules/mymod/bash.linux"
-
-  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash" "linux")"
+  g_current_os='linux'
+  result="$(collect_shell_config "mymod" "bash" "linux")"
   echo "$result" | grep -q 'export LINUX="yes"'
   ! echo "$result" | grep -q 'export GENERIC="yes"'
 }
@@ -77,7 +77,7 @@ load test_helper/common
   create_module "mymod"
   printf 'export GENERIC="yes"\n' >"$TEST_CONFIG/modules/mymod/bash"
 
-  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash" "macos")"
+  result="$(collect_shell_config "mymod" "bash" "macos")"
   echo "$result" | grep -q 'export GENERIC="yes"'
 }
 
@@ -86,7 +86,7 @@ load test_helper/common
   printf 'export GENERIC="yes"\n' >"$TEST_CONFIG/modules/mymod/bash"
   printf 'export MACOS="yes"\n' >"$TEST_CONFIG/modules/mymod/bash.macos"
 
-  result="$(collect_shell_config "$TEST_CONFIG" "mymod" "bash" "linux")"
+  result="$(collect_shell_config "mymod" "bash" "linux")"
   echo "$result" | grep -q 'export GENERIC="yes"'
   ! echo "$result" | grep -q 'export MACOS="yes"'
 }
