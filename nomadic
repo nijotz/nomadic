@@ -11,10 +11,13 @@ NOMADIC_DIR="${NOMADIC_HOME:-$HOME/.nomadic}"
 # functions, and these arrays are shared by load_modules, filter_by_os,
 # toposort, and collect_packages. Use parallel indexed arrays instead of
 # associative arrays for bash 3.2 compatibility, which is the macOS default.
-_mod_name=()
-_mod_after=()
-_mod_pkg=()
-_mod_os=()
+g_module_name=()
+g_module_after=()
+g_module_pkg=()
+g_module_os=()
+
+g_config_dir=""
+g_current_os=""
 
 # --- Utility Functions --------------------------------------------------------
 
@@ -94,13 +97,12 @@ detect_os() {
 
 # --- Modules ------------------------------------------------------------------
 
+# Modules are non-dotfile folders in the modules directory
 discover_modules() {
-  local config_dir="$1"
-  local modules_dir="$config_dir/modules"
+  local modules_dir="$g_config_dir/modules"
 
   if [[ ! -d "$modules_dir" ]]; then
-    warn "No modules directory found at $modules_dir"
-    return 1
+    error "No modules directory found at $modules_dir"
   fi
 
   local -a names=()
@@ -118,24 +120,20 @@ discover_modules() {
 }
 
 # Parse all module deps files once and populate global parallel arrays.
-# After calling this, the following arrays are set
-#   _mod_name[i]  = module name
-#   _mod_after[i] = "after:" value (space-separated module names)
-#   _mod_pkg[i]   = "pkg:" value (space-separated package names)
-#   _mod_os[i]    = "os:" value
 load_modules() {
-  local config_dir="$1"
-  shift
+  local modules=$(discover_modules)
 
-  _mod_name=("$@")
-  _mod_after=()
-  _mod_pkg=()
-  _mod_os=()
+  g_module_name=()
+  g_module_after=()
+  g_module_pkg=()
+  g_module_os=()
 
-  local mod
-  for mod in "$@"; do
-    local deps_file="$config_dir/modules/$mod/deps"
-    local after="" pkg="" os=""
+  local module
+  for module in $modules; do
+    local deps_file="$g_config_dir/modules/$module/deps"
+    local after=""
+    local pkg=""
+    local os=""
 
     if [[ -f "$deps_file" ]]; then
       while IFS= read -r line || [[ -n "$line" ]]; do
@@ -152,45 +150,43 @@ load_modules() {
       done <"$deps_file"
     fi
 
-    _mod_after+=("$after")
-    _mod_pkg+=("$pkg")
-    _mod_os+=("$os")
+    g_module_name+=("$module")
+    g_module_after+=("$after")
+    g_module_pkg+=("$pkg")
+    g_module_os+=("$os")
   done
 }
 
 # Filter the global module arrays by OS compatibility, mutating them in place.
-# After this call, _mod_name[], _mod_after[], _mod_pkg[], and _mod_os[] only
-# contain entries for modules that apply to the given OS. This ensures that
-# toposort and collect_packages never see modules filtered out by OS.
-# Modules with no os: constraint pass on any OS. "linux" matches ubuntu, arch,
+# Modules with no os: constraint passes on any OS. "linux" matches ubuntu, arch,
 # debian, etc.
 filter_by_os() {
-  local os_name="$1"
-
   local -a new_name=() new_after=() new_pkg=() new_os=()
+
   local i
-  for ((i = 0; i < ${#_mod_name[@]}; i++)); do
-    local mod_os="${_mod_os[$i]}"
+  for ((i = 0; i < ${#g_module_name[@]}; i++)); do
+    local mod_os="${g_module_os[$i]}"
 
     # No OS constraint — passes on any OS
     if [[ -z "$mod_os" ]]; then
-      new_name+=("${_mod_name[$i]}")
-      new_after+=("${_mod_after[$i]}")
-      new_pkg+=("${_mod_pkg[$i]}")
-      new_os+=("${_mod_os[$i]}")
+      new_name+=("${g_module_name[$i]}")
+      new_after+=("${g_module_after[$i]}")
+      new_pkg+=("${g_module_pkg[$i]}")
+      new_os+=("${g_module_os[$i]}")
       continue
     fi
 
     # Check if current OS matches any listed OS
     local os_item matched=0
     for os_item in $mod_os; do
-      if [[ "$os_item" == "$os_name" ]]; then
+      if [[ "$os_item" == "$g_current_os" ]]; then
         matched=1
         break
       fi
+
       # "linux" is a catch-all that matches any Linux distro
       if [[ "$os_item" == "linux" ]]; then
-        case "$os_name" in
+        case "$g_current_os" in
           ubuntu | arch | debian | manjaro | linux)
             matched=1
             break
@@ -200,26 +196,43 @@ filter_by_os() {
     done
 
     if ((matched)); then
-      new_name+=("${_mod_name[$i]}")
-      new_after+=("${_mod_after[$i]}")
-      new_pkg+=("${_mod_pkg[$i]}")
-      new_os+=("${_mod_os[$i]}")
+      new_name+=("${g_module_name[$i]}")
+      new_after+=("${g_module_after[$i]}")
+      new_pkg+=("${g_module_pkg[$i]}")
+      new_os+=("${g_module_os[$i]}")
     fi
   done
 
-  _mod_name=("${new_name[@]+"${new_name[@]}"}")
-  _mod_after=("${new_after[@]+"${new_after[@]}"}")
-  _mod_pkg=("${new_pkg[@]+"${new_pkg[@]}"}")
-  _mod_os=("${new_os[@]+"${new_os[@]}"}")
+  # Sets arrays to their new version. Syntatic garbage is to work around bash
+  # 3.2 treating empty arrays as unbound under set -u
+  g_module_name=("${new_name[@]+"${new_name[@]}"}")
+  g_module_after=("${new_after[@]+"${new_after[@]}"}")
+  g_module_pkg=("${new_pkg[@]+"${new_pkg[@]}"}")
+  g_module_os=("${new_os[@]+"${new_os[@]}"}")
+}
+
+# Setup config directory (if not defined), current os, and module data filtered by OS
+# Returns 1 if no modules are found, 0 otherwise.
+setup_global_state() {
+  if [[ -z "${1:-}" ]]; then
+    g_config_dir="$(resolve_config_dir)"
+  else
+    g_config_dir="$1"
+  fi
+
+  g_current_os="$(detect_os)"
+
+  load_modules
+
+  filter_by_os
 }
 
 # Source a module's setup script if present.
 # Setup scripts run in the current shell so they can modify the environment
 # (e.g., install homebrew and update PATH).
 run_setup() {
-  local config_dir="$1"
-  local mod="$2"
-  local setup_file="$config_dir/modules/$mod/setup"
+  local mod="$1"
+  local setup_file="$g_config_dir/modules/$mod/setup"
 
   if [[ ! -f "$setup_file" ]]; then
     return 0
@@ -236,16 +249,15 @@ run_setup() {
 # Existing correct symlinks are skipped. Existing non-symlink targets
 # are warned about and skipped.
 process_links() {
-  local config_dir="$1"
-  local mod="$2"
-  local force="${3:-0}"
-  local links_file="$config_dir/modules/$mod/links"
+  local mod="$1"
+  local force="${2:-0}"
+  local links_file="$g_config_dir/modules/$mod/links"
 
   if [[ ! -f "$links_file" ]]; then
     return 0
   fi
 
-  local module_dir="$config_dir/modules/$mod"
+  local module_dir="$g_config_dir/modules/$mod"
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     line="$(trim_comment "$line")"
@@ -293,14 +305,13 @@ process_links() {
 # run and their stdout is captured (they inherit the current environment,
 # so prior modules' exports are visible).
 collect_shell_config() {
-  local config_dir="$1"
-  local mod="$2"
-  local shell="$3"
-  local os="${4:-}"
-  local config_file="$config_dir/modules/$mod/$shell.$os"
+  local mod="$1"
+  local shell="$2"
+  local os="$g_current_os"
+  local config_file="$g_config_dir/modules/$mod/$shell.$os"
 
   if [[ -z "$os" ]] || [[ ! -f "$config_file" ]]; then
-    config_file="$config_dir/modules/$mod/$shell"
+    config_file="$g_config_dir/modules/$mod/$shell"
   fi
 
   if [[ ! -f "$config_file" ]]; then
@@ -329,8 +340,8 @@ collect_shell_config() {
 # Topological sort using Kahn's algorithm (BFS-based).
 #
 # Reads from the global arrays populated by load_modules:
-#   _mod_name[]    — module names
-#   _mod_after[]  — each module's "after:" dependencies
+#   g_module_name[]    — module names
+#   g_module_after[]  — each module's "after:" dependencies
 #
 # Outputs module names in dependency order. Modules with no ordering
 # constraint between them are sorted alphabetically for determinism.
@@ -340,7 +351,7 @@ collect_shell_config() {
 # module list) are warned about and skipped — this keeps configs portable
 # across machines where some modules may not exist.
 toposort() {
-  local count=${#_mod_name[@]}
+  local count=${#g_module_name[@]}
 
   if ((count == 0)); then
     return 0
@@ -348,8 +359,8 @@ toposort() {
 
   # Build parallel arrays for the graph. Ideally these would be associative
   # arrays keyed by module name, but bash 3.2 only supports integer indices.
-  #   indegree[i] = number of unresolved dependencies for _mod_name[i]
-  #   edges[i]    = space-separated names of modules that depend on _mod_name[i]
+  #   indegree[i] = number of unresolved dependencies for g_module_name[i]
+  #   edges[i]    = space-separated names of modules that depend on g_module_name[i]
   local -a indegree=()
   local -a edges=()
   local i
@@ -362,17 +373,17 @@ toposort() {
   # "after: X" means X must come before this module, so we add an edge
   # from X -> this module (X is a prerequisite).
   for ((i = 0; i < count; i++)); do
-    local after="${_mod_after[$i]}"
+    local after="${g_module_after[$i]}"
     if [[ -n "$after" ]]; then
       for dep in $after; do
         local dep_idx
-        if dep_idx="$(index_of "$dep" "${_mod_name[@]}")"; then
+        if dep_idx="$(index_of "$dep" "${g_module_name[@]}")"; then
           # Add this module as a successor of dep
-          edges[$dep_idx]="${edges[$dep_idx]:+${edges[$dep_idx]} }${_mod_name[$i]}"
+          edges[$dep_idx]="${edges[$dep_idx]:+${edges[$dep_idx]} }${g_module_name[$i]}"
           # This module has one more incoming edge
           indegree[$i]=$((${indegree[$i]} + 1))
         else
-          warn "Module '${_mod_name[$i]}' depends on unknown module '$dep' (skipping dependency)"
+          warn "Module '${g_module_name[$i]}' depends on unknown module '$dep' (skipping dependency)"
         fi
       done
     fi
@@ -383,7 +394,7 @@ toposort() {
   local -a queue=()
   for ((i = 0; i < count; i++)); do
     if ((${indegree[$i]} == 0)); then
-      queue+=("${_mod_name[$i]}")
+      queue+=("${g_module_name[$i]}")
     fi
   done
   local sorted_queue
@@ -404,14 +415,14 @@ toposort() {
     result+=("$current")
 
     local cur_idx
-    cur_idx="$(index_of "$current" "${_mod_name[@]}")"
+    cur_idx="$(index_of "$current" "${g_module_name[@]}")"
 
     # For each module that depends on current, decrement its in-degree
     local -a newly_free=()
     if [[ -n "${edges[$cur_idx]}" ]]; then
       for successor in ${edges[$cur_idx]}; do
         local succ_idx
-        succ_idx="$(index_of "$successor" "${_mod_name[@]}")"
+        succ_idx="$(index_of "$successor" "${g_module_name[@]}")"
         indegree[$succ_idx]=$((${indegree[$succ_idx]} - 1))
         if ((${indegree[$succ_idx]} == 0)); then
           newly_free+=("$successor")
@@ -435,7 +446,7 @@ toposort() {
     warn "Dependency cycle detected among modules:"
     for ((i = 0; i < count; i++)); do
       if ((${indegree[$i]} > 0)); then
-        warn "  ${_mod_name[$i]} (blocked)"
+        warn "  ${g_module_name[$i]} (blocked)"
       fi
     done
     return 1
@@ -573,14 +584,14 @@ read_package_list() {
   done <"$file"
 }
 
-# Collect all package names from _mod_pkg[] globals.
+# Collect all package names from g_module_pkg[] globals.
 # Splits space-separated values and deduplicates.
 # Outputs one package name per line.
 collect_packages() {
   local -a seen=()
   local i
-  for ((i = 0; i < ${#_mod_pkg[@]}; i++)); do
-    local pkgs="${_mod_pkg[$i]}"
+  for ((i = 0; i < ${#g_module_pkg[@]}; i++)); do
+    local pkgs="${g_module_pkg[$i]}"
     [[ -z "$pkgs" ]] && continue
     local pkg
     for pkg in $pkgs; do
@@ -719,14 +730,14 @@ install_module_packages() {
   [[ -z "$_pkg_manager" ]] && return 0
 
   local idx
-  if ! idx="$(index_of "$mod" "${_mod_name[@]}")"; then
+  if ! idx="$(index_of "$mod" "${g_module_name[@]}")"; then
     return 0
   fi
 
-  local pkgs="${_mod_pkg[$idx]}"
+  local pkgs="${g_module_pkg[$idx]}"
   [[ -z "$pkgs" ]] && return 0
 
-  local map_file="$config_dir/packages/$_pkg_manager.map"
+  local map_file="$g_config_dir/packages/$_pkg_manager.map"
   local -a missing=()
   local pkg
   for pkg in $pkgs; do
@@ -756,8 +767,7 @@ install_module_packages() {
 # Discover and install all packages from module deps and package lists.
 # Detects the package manager, collects packages, resolves names, and installs.
 install_all_packages() {
-  local config_dir="$1"
-  local os="${2:-}"
+  local os="$g_current_os"
 
   local pkg_manager
   if ! pkg_manager="$(detect_pkg_manager)"; then
@@ -773,7 +783,7 @@ install_all_packages() {
   done < <(collect_packages)
 
   # Read base package list
-  local pkg_list="$config_dir/packages/packages"
+  local pkg_list="$g_config_dir/packages/packages"
   if [[ -f "$pkg_list" ]]; then
     while IFS= read -r pkg; do
       [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
@@ -781,10 +791,10 @@ install_all_packages() {
   fi
 
   # Read OS-specific package list
-  if [[ -n "$os" && -f "$config_dir/packages/packages.$os" ]]; then
+  if [[ -n "$os" && -f "$g_config_dir/packages/packages.$os" ]]; then
     while IFS= read -r pkg; do
       [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
-    done < <(read_package_list "$config_dir/packages/packages.$os")
+    done < <(read_package_list "$g_config_dir/packages/packages.$os")
   fi
 
   if ((${#all_pkgs[@]} == 0)); then
@@ -792,7 +802,7 @@ install_all_packages() {
   fi
 
   # Resolve through map file
-  local map_file="$config_dir/packages/$pkg_manager.map"
+  local map_file="$g_config_dir/packages/$pkg_manager.map"
   local -a resolved=()
   while IFS= read -r pkg; do
     [[ -n "$pkg" ]] && resolved+=("$pkg")
@@ -1013,46 +1023,25 @@ cmd_apply() {
     shift
   done
 
-  # Resolve config directory: git URL → explicit path → remembered path → default
+  # Checkout a git URL if needed
   if [[ -n "$config_dir" ]] && is_git_url "$config_dir"; then
     config_dir="$(sync_config_repo "$config_dir")"
-  elif [[ -z "$config_dir" ]]; then
-    config_dir="$(resolve_config_dir)"
-    # Pull latest if config is a git repo
-    if ((!skip_pull)) && [[ -d "$config_dir/.git" ]]; then
-      log "Pulling config repo..."
-      if git -C "$config_dir" pull --ff-only >&2; then
-        git -C "$config_dir" submodule update --init --recursive >&2
-      else
-        warn "Could not pull config repo, using local copy"
-      fi
+  fi
+
+  setup_global_state $config_dir
+
+  # Pull latest if config is a git repo
+  if ((!skip_pull)) && [[ -d "$g_config_dir/.git" ]]; then
+    log "Pulling config repo..."
+    if git -C "$g_config_dir" pull --ff-only >&2; then
+      git -C "$g_config_dir" submodule update --init --recursive >&2
+    else
+      warn "Could not pull config repo, using local copy"
     fi
   fi
 
-  if [[ ! -d "$config_dir/modules" ]]; then
-    error "No modules directory at $config_dir/modules"
-  fi
+  log "Applying config from $g_config_dir"
 
-  log "Applying config from $config_dir"
-
-  # Discover all modules
-  local -a all_modules=()
-  while IFS= read -r mod; do
-    all_modules+=("$mod")
-  done < <(discover_modules "$config_dir")
-
-  if ((${#all_modules[@]} == 0)); then
-    log "No modules found"
-    return 0
-  fi
-
-  # Load deps, filter by OS (mutates globals), then sort.
-  # Filtering before toposort ensures OS-excluded modules never appear in
-  # package collection or dependency ordering.
-  local current_os
-  current_os="$(detect_os)"
-  load_modules "$config_dir" "${all_modules[@]}"
-  filter_by_os "$current_os"
   local -a filtered=()
   while IFS= read -r mod; do
     [[ -n "$mod" ]] && filtered+=("$mod")
@@ -1079,17 +1068,17 @@ cmd_apply() {
   # Process each module in dependency order
   for mod in "${filtered[@]}"; do
     if ! ((skip_packages)); then
-      install_module_packages "$config_dir" "$mod"
+      install_module_packages "$g_config_dir" "$mod"
     fi
 
     log "Applying module: $mod"
 
-    run_setup "$config_dir" "$mod"
-    process_links "$config_dir" "$mod" "$force_links"
+    run_setup "$mod"
+    process_links "$mod" "$force_links"
 
-    ((has_bash)) && collect_shell_config "$config_dir" "$mod" "bash" "$current_os" >>"$rc_bash"
-    ((has_fish)) && collect_shell_config "$config_dir" "$mod" "fish" "$current_os" >>"$rc_fish"
-    ((has_zsh)) && collect_shell_config "$config_dir" "$mod" "zsh" "$current_os" >>"$rc_zsh"
+    ((has_bash)) && collect_shell_config "$mod" "bash" >>"$rc_bash"
+    ((has_fish)) && collect_shell_config "$mod" "fish" >>"$rc_fish"
+    ((has_zsh)) && collect_shell_config "$mod" "zsh" >>"$rc_zsh"
 
     # Source accumulated bash config so later modules see prior exports
     if [[ -s "$rc_bash" ]]; then
@@ -1127,7 +1116,7 @@ cmd_apply() {
 
   # Remember config path for next time
   mkdir -p "$NOMADIC_DIR/state"
-  printf '%s\n' "$(cd "$config_dir" && pwd)" >"$NOMADIC_DIR/state/config-path"
+  printf '%s\n' "$(cd "$g_config_dir" && pwd)" >"$NOMADIC_DIR/state/config-path"
 
   log "Shell config applied. To pick up changes: exec bash  (or restart your shell)"
 
@@ -1136,10 +1125,10 @@ cmd_apply() {
     log "Skipping package install (--no-packages)"
   else
     log "Installing packages..."
-    install_all_packages "$config_dir" "$current_os"
+    install_all_packages
   fi
 
-  check_config_drift "$config_dir" || true
+  check_config_drift
 
   log "Done!"
 }
@@ -1150,48 +1139,46 @@ cmd_apply() {
 # or commits behind origin. Only runs if the config dir is a git repo.
 # Returns 0 if clean or not a git repo, 1 if drift detected.
 check_config_drift() {
-  local config_dir="$1"
-
-  if [[ ! -d "$config_dir/.git" ]]; then
+  if [[ ! -d "$g_config_dir/.git" ]]; then
     return 0
   fi
 
   local drift=0
 
   # Uncommitted changes (staged or unstaged)
-  if ! git -C "$config_dir" diff --quiet 2>/dev/null \
-    || ! git -C "$config_dir" diff --cached --quiet 2>/dev/null; then
-    warn "Config has uncommitted changes: $config_dir"
+  if ! git -C "$g_config_dir" diff --quiet 2>/dev/null \
+    || ! git -C "$g_config_dir" diff --cached --quiet 2>/dev/null; then
+    warn "Config has uncommitted changes: $g_config_dir"
     drift=1
   fi
 
   # Untracked files
   local untracked
-  untracked="$(git -C "$config_dir" ls-files --others --exclude-standard 2>/dev/null)"
+  untracked="$(git -C "$g_config_dir" ls-files --others --exclude-standard 2>/dev/null)"
   if [[ -n "$untracked" ]]; then
-    warn "Config has untracked files: $config_dir"
+    warn "Config has untracked files: $g_config_dir"
     drift=1
   fi
 
   # Check against remote (only if we have a remote and can fetch)
   local remote_branch
-  remote_branch="$(git -C "$config_dir" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)" || return $drift
+  remote_branch="$(git -C "$g_config_dir" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)" || return $drift
 
-  git -C "$config_dir" fetch --quiet 2>/dev/null || return $drift
+  git -C "$g_config_dir" fetch --quiet 2>/dev/null || return $drift
 
   # Unpushed commits
   local ahead
-  ahead="$(git -C "$config_dir" rev-list --count '@{u}..HEAD' 2>/dev/null)"
+  ahead="$(git -C "$g_config_dir" rev-list --count '@{u}..HEAD' 2>/dev/null)"
   if [[ -n "$ahead" ]] && ((ahead > 0)); then
-    warn "Config has $ahead unpushed commit(s): $config_dir"
+    warn "Config has $ahead unpushed commit(s): $g_config_dir"
     drift=1
   fi
 
   # Behind remote
   local behind
-  behind="$(git -C "$config_dir" rev-list --count 'HEAD..@{u}' 2>/dev/null)"
+  behind="$(git -C "$g_config_dir" rev-list --count 'HEAD..@{u}' 2>/dev/null)"
   if [[ -n "$behind" ]] && ((behind > 0)); then
-    warn "Config is $behind commit(s) behind remote: $config_dir"
+    warn "Config is $behind commit(s) behind remote: $g_config_dir"
     drift=1
   fi
 
@@ -1248,15 +1235,15 @@ cmd_update() {
 }
 
 cmd_status() {
-  local config_dir="${1:-$(resolve_config_dir)}"
+  local g_config_dir="${1:-$(resolve_config_dir)}"
 
-  if [[ ! -d "$config_dir" ]]; then
-    error "Config directory not found: $config_dir"
+  if [[ ! -d "$g_config_dir" ]]; then
+    error "Config directory not found: $g_config_dir"
   fi
 
-  log "Checking config: $config_dir"
+  log "Checking config: $g_config_dir"
 
-  if check_config_drift "$config_dir"; then
+  if check_config_drift; then
     log "Config is clean"
   fi
 }
@@ -1266,17 +1253,11 @@ cmd_status() {
 # Verify symlinks declared in a module's links file are intact.
 # Returns 0 if all good, 1 if any issues found.
 check_links() {
-  local config_dir="$1"
   local issues=0
 
-  local -a modules=()
-  while IFS= read -r mod; do
-    modules+=("$mod")
-  done < <(discover_modules "$config_dir")
-
-  for mod in "${modules[@]}"; do
-    local links_file="$config_dir/modules/$mod/links"
-    local module_dir="$config_dir/modules/$mod"
+  for mod in "${g_module_name[@]}"; do
+    local links_file="$g_config_dir/modules/$mod/links"
+    local module_dir="$g_config_dir/modules/$mod"
 
     [[ -f "$links_file" ]] || continue
 
@@ -1313,29 +1294,17 @@ check_links() {
 # Validate deps: check for unknown after: targets and dependency cycles.
 # Returns 0 if all good, 1 if any issues found.
 check_deps() {
-  local config_dir="$1"
   local issues=0
 
-  local -a all_modules=()
-  while IFS= read -r mod; do
-    all_modules+=("$mod")
-  done < <(discover_modules "$config_dir")
-
-  if ((${#all_modules[@]} == 0)); then
-    warn "No modules found"
-    return 1
-  fi
-
-  log "Found ${#all_modules[@]} module(s)"
-  load_modules "$config_dir" "${all_modules[@]}"
+  log "Found ${#g_module_name[@]} module(s)"
 
   local i
-  for ((i = 0; i < ${#_mod_name[@]}; i++)); do
-    local after="${_mod_after[$i]}"
+  for ((i = 0; i < ${#g_module_name[@]}; i++)); do
+    local after="${g_module_after[$i]}"
     if [[ -n "$after" ]]; then
       for dep in $after; do
-        if ! index_of "$dep" "${_mod_name[@]}" >/dev/null 2>&1; then
-          warn "Module '${_mod_name[$i]}' depends on unknown module '$dep'"
+        if ! index_of "$dep" "${g_module_name[@]}" >/dev/null 2>&1; then
+          warn "Module '${g_module_name[$i]}' depends on unknown module '$dep'"
           ((issues += 1))
         fi
       done
@@ -1394,22 +1363,23 @@ check_pkg_manager() {
 }
 
 cmd_doctor() {
-  local config_dir="${1:-$(resolve_config_dir)}"
   local issues=0
 
-  if [[ ! -d "$config_dir" ]]; then
-    error "Config directory not found: $config_dir"
-  fi
-  if [[ ! -d "$config_dir/modules" ]]; then
-    error "No modules directory at $config_dir/modules"
-  fi
-  log "Config: $config_dir"
+  setup_global_state "${1:-}"
 
-  check_deps "$config_dir" || ((issues += 1))
-  check_links "$config_dir" || ((issues += 1))
+  if [[ ! -d "$g_config_dir" ]]; then
+    error "Config directory not found: $g_config_dir"
+  fi
+  if [[ ! -d "$g_config_dir/modules" ]]; then
+    error "No modules directory at $g_config_dir/modules"
+  fi
+  log "Config: $g_config_dir"
+
+  check_deps || ((issues += 1))
+  check_links || ((issues += 1))
   check_rc || ((issues += 1))
   check_pkg_manager || ((issues += 1))
-  check_config_drift "$config_dir" || ((issues += 1))
+  check_config_drift || ((issues += 1))
 
   if ((issues == 0)); then
     log "Everything looks good!"

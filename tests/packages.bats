@@ -155,7 +155,7 @@ EOF
   install_packages nix htop jq curl
 
   [ "${#nix_calls[@]}" -eq 1 ]
-  [ "${nix_calls[0]}" = "profile add nixpkgs#htop nixpkgs#jq nixpkgs#curl" ]
+  [ "${nix_calls[0]}" = "profile install nixpkgs#htop nixpkgs#jq nixpkgs#curl" ]
 
   unset -f nix
 }
@@ -231,9 +231,12 @@ EOF
   # Stub detect_pkg_manager to return brew (no actual brew needed)
   detect_pkg_manager() { echo "brew"; }
   # Stub install_packages to print what it receives (skip actual install)
-  install_packages() { shift; printf '%s\n' "$@"; }
-
-  run install_all_packages "$TEST_CONFIG" "macos"
+  install_packages() {
+    shift
+    printf '%s\n' "$@"
+  }
+  g_current_os="macos"
+  run install_all_packages
   [ "$status" -eq 0 ]
   [[ "$output" == *"htop"* ]]
   [[ "$output" == *"jq"* ]]

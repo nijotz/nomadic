@@ -6,7 +6,7 @@ load test_helper/common
   echo "hello" >"$TEST_CONFIG/modules/mymod/myfile"
   printf 'myfile %s/target\n' "$TEST_DIR" >"$TEST_CONFIG/modules/mymod/links"
 
-  process_links "$TEST_CONFIG" "mymod"
+  process_links "mymod"
   [ -L "$TEST_DIR/target" ]
   [ "$(readlink "$TEST_DIR/target")" = "$TEST_CONFIG/modules/mymod/myfile" ]
 }
@@ -19,7 +19,7 @@ load test_helper/common
   local orig_home="$HOME"
   HOME="$TEST_DIR/home"
   mkdir -p "$HOME"
-  process_links "$TEST_CONFIG" "mymod"
+  process_links "mymod"
   [ -L "$HOME/.test-nomadic-link" ]
   HOME="$orig_home"
 }
@@ -29,7 +29,7 @@ load test_helper/common
   echo "hello" >"$TEST_CONFIG/modules/mymod/myfile"
   printf 'myfile %s/deep/nested/dir/target\n' "$TEST_DIR" >"$TEST_CONFIG/modules/mymod/links"
 
-  process_links "$TEST_CONFIG" "mymod"
+  process_links "mymod"
   [ -L "$TEST_DIR/deep/nested/dir/target" ]
 }
 
@@ -41,7 +41,7 @@ load test_helper/common
   # Create the correct symlink first
   ln -s "$TEST_CONFIG/modules/mymod/myfile" "$TEST_DIR/target"
 
-  run process_links "$TEST_CONFIG" "mymod"
+  run process_links "mymod"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q 'already linked'
 }
@@ -54,7 +54,7 @@ load test_helper/common
   # Create a regular file at the target
   echo "existing" >"$TEST_DIR/target"
 
-  run process_links "$TEST_CONFIG" "mymod"
+  run process_links "mymod"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q 'already exists'
   # Target should still be the regular file, not overwritten
@@ -65,10 +65,10 @@ load test_helper/common
   create_module "mymod"
   echo "hello" >"$TEST_CONFIG/modules/mymod/myfile"
   printf 'myfile %s/target\n' "$TEST_DIR" >"$TEST_CONFIG/modules/mymod/links"
-
   echo "existing content" >"$TEST_DIR/target"
 
-  process_links "$TEST_CONFIG" "mymod" 1
+  process_links "mymod" 1
+
   # Target should now be a symlink
   [ -L "$TEST_DIR/target" ]
   [ "$(readlink "$TEST_DIR/target")" = "$TEST_CONFIG/modules/mymod/myfile" ]
@@ -83,10 +83,10 @@ load test_helper/common
   create_module "mymod"
   echo "hello" >"$TEST_CONFIG/modules/mymod/myfile"
   printf 'myfile %s/target\n' "$TEST_DIR" >"$TEST_CONFIG/modules/mymod/links"
-
   ln -s /some/wrong/path "$TEST_DIR/target"
 
-  process_links "$TEST_CONFIG" "mymod" 1
+  process_links "mymod" 1
+
   [ -L "$TEST_DIR/target" ]
   [ "$(readlink "$TEST_DIR/target")" = "$TEST_CONFIG/modules/mymod/myfile" ]
 }
@@ -98,7 +98,7 @@ load test_helper/common
   printf '%s\n' "# a comment" "" "file1 $TEST_DIR/t1" "" "# another comment" "file2 $TEST_DIR/t2" \
     >"$TEST_CONFIG/modules/mymod/links"
 
-  process_links "$TEST_CONFIG" "mymod"
+  process_links "mymod"
   [ -L "$TEST_DIR/t1" ]
   [ -L "$TEST_DIR/t2" ]
 }
@@ -106,7 +106,7 @@ load test_helper/common
 @test "process_links: missing links file is a no-op" {
   create_module "mymod"
 
-  run process_links "$TEST_CONFIG" "mymod"
+  run process_links "mymod"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
@@ -119,7 +119,7 @@ load test_helper/common
   printf '%s\n' "file1 $TEST_DIR/t1" "file2 $TEST_DIR/t2" "file3 $TEST_DIR/t3" \
     >"$TEST_CONFIG/modules/mymod/links"
 
-  process_links "$TEST_CONFIG" "mymod"
+  process_links "mymod"
   [ -L "$TEST_DIR/t1" ]
   [ -L "$TEST_DIR/t2" ]
   [ -L "$TEST_DIR/t3" ]

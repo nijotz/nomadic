@@ -6,17 +6,17 @@ load test_helper/common
   printf '%s\n' 'after: homebrew packages' 'pkg: jq' >"$TEST_CONFIG/modules/mymod/deps"
 
   load_modules "$TEST_CONFIG" "mymod"
-  [ "${_mod_after[0]}" = "homebrew packages" ]
-  [ "${_mod_pkg[0]}" = "jq" ]
-  [ -z "${_mod_os[0]}" ]
+  [ "${g_module_after[0]}" = "homebrew packages" ]
+  [ "${g_module_pkg[0]}" = "jq" ]
+  [ -z "${g_module_os[0]}" ]
 }
 
 @test "load_modules handles missing deps file" {
   create_module "mymod"
 
   load_modules "$TEST_CONFIG" "mymod"
-  [ -z "${_mod_after[0]}" ]
-  [ -z "${_mod_pkg[0]}" ]
+  [ -z "${g_module_after[0]}" ]
+  [ -z "${g_module_pkg[0]}" ]
 }
 
 @test "load_modules loads multiple modules" {
@@ -24,10 +24,10 @@ load test_helper/common
   create_module "beta" "pkg: jq"
 
   load_modules "$TEST_CONFIG" "alpha" "beta"
-  [ "${_mod_after[0]}" = "beta" ]
-  [ -z "${_mod_pkg[0]}" ]
-  [ -z "${_mod_after[1]}" ]
-  [ "${_mod_pkg[1]}" = "jq" ]
+  [ "${g_module_after[0]}" = "beta" ]
+  [ -z "${g_module_pkg[0]}" ]
+  [ -z "${g_module_after[1]}" ]
+  [ "${g_module_pkg[1]}" = "jq" ]
 }
 
 @test "load_modules handles trailing whitespace" {
@@ -35,8 +35,8 @@ load test_helper/common
   printf 'after: homebrew   \npkg: jq   \n' >"$TEST_CONFIG/modules/mymod/deps"
 
   load_modules "$TEST_CONFIG" "mymod"
-  [ "${_mod_after[0]}" = "homebrew" ]
-  [ "${_mod_pkg[0]}" = "jq" ]
+  [ "${g_module_after[0]}" = "homebrew" ]
+  [ "${g_module_pkg[0]}" = "jq" ]
 }
 
 @test "load_modules skips blank lines and comments" {
@@ -45,8 +45,8 @@ load test_helper/common
     >"$TEST_CONFIG/modules/mymod/deps"
 
   load_modules "$TEST_CONFIG" "mymod"
-  [ "${_mod_after[0]}" = "homebrew" ]
-  [ "${_mod_pkg[0]}" = "jq" ]
+  [ "${g_module_after[0]}" = "homebrew" ]
+  [ "${g_module_pkg[0]}" = "jq" ]
 }
 
 @test "load_modules strips inline comments" {
@@ -54,7 +54,7 @@ load test_helper/common
   printf 'after: homebrew  # needs brew first\n' >"$TEST_CONFIG/modules/mymod/deps"
 
   load_modules "$TEST_CONFIG" "mymod"
-  [ "${_mod_after[0]}" = "homebrew" ]
+  [ "${g_module_after[0]}" = "homebrew" ]
 }
 
 @test "load_modules warns on unknown directives" {
