@@ -1,9 +1,0 @@
-[submodule "scripts/mvln"]
-	path = scripts/mvln
-	url = https://github.com/nijotz/mvln.git
-[submodule "scripts/scripts"]
-	path = scripts/scripts
-	url = https://github.com/nijotz/scripts.git
-[submodule "dotfiles/nvim"]
-	path = dotfiles/config/nvim
-	url = git@github.com:nijotz/lazyvim-config.git
