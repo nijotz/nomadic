@@ -19,19 +19,46 @@ g_module_os=()
 g_config_dir=""
 g_current_os=""
 
+# --- Colors ------------------------------------------------------------------
+
+# Enable colors only when stderr is a terminal
+if [[ -t 2 ]]; then
+  _c_reset=$'\033[0m'
+  _c_bold=$'\033[1m'
+  _c_green=$'\033[32m'
+  _c_yellow=$'\033[33m'
+  _c_red=$'\033[31m'
+  _c_cyan=$'\033[36m'
+else
+  _c_reset=""
+  _c_bold=""
+  _c_green=""
+  _c_yellow=""
+  _c_red=""
+  _c_cyan=""
+fi
+
 # --- Utility Functions --------------------------------------------------------
 
 log() {
-  echo "[nomadic] $*" >&2
+  echo "${_c_cyan}[nomadic]${_c_reset} $*" >&2
 }
 
 warn() {
-  echo "[nomadic] WARN: $*" >&2
+  echo "${_c_yellow}[nomadic] WARN:${_c_reset} $*" >&2
 }
 
 error() {
-  echo "[nomadic] ERROR: $*" >&2
+  failure "ERROR: $*"
   exit 1
+}
+
+success() {
+  echo "${_c_green}${_c_bold}[nomadic] $*${_c_reset}" >&2
+}
+
+failure() {
+  echo "${_c_red}${_c_bold}[nomadic] $*${_c_reset}" >&2
 }
 
 # Strip leading and trailing whitespace from a string.
@@ -1130,7 +1157,7 @@ cmd_apply() {
 
   check_config_drift
 
-  log "Done!"
+  success "Done!"
 }
 
 # --- Status / Drift Detection -------------------------------------------------
@@ -1217,7 +1244,7 @@ cmd_update() {
   fi
 
   if [[ "$NOMADIC_VERSION" == "$latest" ]]; then
-    log "Already up to date (v$NOMADIC_VERSION)"
+    success "Already up to date (v$NOMADIC_VERSION)"
     return 0
   fi
 
@@ -1231,7 +1258,7 @@ cmd_update() {
 
   chmod +x "$nomadic_self.tmp"
   mv "$nomadic_self.tmp" "$nomadic_self"
-  log "Updated to v$latest"
+  success "Updated to v$latest"
 }
 
 cmd_status() {
@@ -1382,9 +1409,9 @@ cmd_doctor() {
   check_config_drift || ((issues += 1))
 
   if ((issues == 0)); then
-    log "Everything looks good!"
+    success "Everything looks good!"
   else
-    log "$issues issue(s) found"
+    failure "$issues issue(s) found"
   fi
 
   return $((issues > 0 ? 1 : 0))
