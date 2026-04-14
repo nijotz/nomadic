@@ -3,7 +3,7 @@ set -euo pipefail
 
 # --- Constants / Globals ------------------------------------------------------
 
-NOMADIC_VERSION="0.4.0"
+NOMADIC_VERSION="0.4.1"
 NOMADIC_DIR="${NOMADIC_HOME:-$HOME/.nomadic}"
 
 # Global parallel arrays, populated by load_modules. All share the same
