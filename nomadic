@@ -722,7 +722,15 @@ snapshot_installed_packages() {
 
   case "$_pkg_manager" in
     brew)
-      _installed_pkgs="$(brew list --formula -1 2>/dev/null)"
+      # Include both versioned names (e.g. "python@3.14") and the unversioned
+      # base name (e.g. "python") so that pkg declarations like "pkg: python"
+      # match even when brew installs a versioned formula.
+      local _brew_raw
+      _brew_raw="$(brew list --formula -1 2>/dev/null)"
+      _installed_pkgs="$({
+        printf '%s\n' "$_brew_raw"
+        printf '%s\n' "$_brew_raw" | sed 's/@.*//'
+      } | sort -u)"
       _installed_casks="$(brew list --cask -1 2>/dev/null)"
       ;;
     nix)
