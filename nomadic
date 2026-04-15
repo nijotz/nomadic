@@ -1094,11 +1094,11 @@ cmd_apply() {
 
   # Process each module in dependency order
   for mod in "${filtered[@]}"; do
+    log "Applying module: $mod"
+
     if ! ((skip_packages)); then
       install_module_packages "$g_config_dir" "$mod"
     fi
-
-    log "Applying module: $mod"
 
     run_setup "$mod"
     process_links "$mod" "$force_links"
