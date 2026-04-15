@@ -197,6 +197,33 @@ STUB
   [[ "$output" == *"experimental-features"* ]]
 }
 
+@test "snapshot_installed_packages includes unversioned names for brew versioned formula" {
+  local stub_dir="$TEST_DIR/stub"
+  mkdir -p "$stub_dir"
+  cat >"$stub_dir/brew" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "list --formula" ]]; then
+  printf 'python@3.14\ngit\n'
+fi
+STUB
+  chmod +x "$stub_dir/brew"
+
+  PATH="$stub_dir:$PATH" snapshot_installed_packages
+  echo "$_installed_pkgs" | grep -qx "python@3.14"
+  echo "$_installed_pkgs" | grep -qx "python"
+  echo "$_installed_pkgs" | grep -qx "git"
+}
+
+@test "is_pkg_installed matches unversioned name when brew has versioned formula" {
+  # Reproduces a bug where "pkg: python" would try to reinstall because
+  # brew lists it as "python@3.14" and the exact match failed.
+  _installed_pkgs=$'git\npython@3.14\npython'
+  _pkg_manager="brew"
+
+  run is_pkg_installed "python"
+  [ "$status" -eq 0 ]
+}
+
 @test "resolve_packages handles comments and blank lines in map file" {
   local map_file="$TEST_DIR/apt.map"
   cat >"$map_file" <<'EOF'
