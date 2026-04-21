@@ -176,6 +176,7 @@ fi
 STUB
   chmod +x "$stub_dir/nix"
 
+  detect_pkg_manager() { echo "nix"; }
   PATH="$stub_dir:$PATH" snapshot_installed_packages
   [ "$(echo "$_installed_pkgs" | sed -n '1p')" = "fzf" ]
   [ "$(echo "$_installed_pkgs" | sed -n '2p')" = "git" ]
@@ -191,6 +192,7 @@ exit 1
 STUB
   chmod +x "$stub_dir/nix"
 
+  detect_pkg_manager() { echo "nix"; }
   PATH="$stub_dir:$PATH" run snapshot_installed_packages
   [ "$status" -eq 1 ]
   [[ "$output" == *"nix detected but"* ]]
