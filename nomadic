@@ -518,7 +518,6 @@ HOOK
   cat <<HOOK
   local state_dir="${state_dir}"
   local repo_url="${repo_url}"
-  local current="${NOMADIC_VERSION}"
 HOOK
   cat <<'HOOK'
   local notice="$state_dir/update-notice"
@@ -538,10 +537,16 @@ HOOK
     return 0
   fi
 
-  # Background check: query git remote, write notice if newer version exists
+  # Background check: query git remote, write notice if newer version exists.
+  # The installed version is read at runtime from `nomadic --version` so that
+  # a binary update is picked up on the next shell load without requiring a
+  # `nomadic apply` to refresh this hook.
   (
     mkdir -p "$state_dir"
     echo "$now" >"$stamp"
+    local current latest
+    current="$(nomadic --version 2>/dev/null | awk '{print $2}')"
+    [[ -z "$current" ]] && exit 0
     latest="$(git ls-remote --tags "$repo_url" 'v*' 2>/dev/null \
       | sed 's|.*/v||; s/\^{}$//' | sort -V | tail -1)"
     if [[ -n "$latest" && "$latest" != "$current" ]]; then

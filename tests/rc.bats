@@ -102,9 +102,12 @@ teardown() {
   grep -q '_nomadic_update_check' "$NOMADIC_DIR/config.bash"
 }
 
-@test "generate_rc: update hook embeds current version" {
+@test "generate_rc: update hook reads version from binary at runtime" {
   echo "content" | generate_rc "bash"
-  grep -q "local current=\"$NOMADIC_VERSION\"" "$NOMADIC_DIR/config.bash"
+  # Version must not be hardcoded at hook-generation time
+  ! grep -q "current=\"$NOMADIC_VERSION\"" "$NOMADIC_DIR/config.bash"
+  # It should resolve the version by calling `nomadic --version` at runtime
+  grep -q 'nomadic --version' "$NOMADIC_DIR/config.bash"
 }
 
 @test "generate_rc: update hook shows and clears notice file" {
