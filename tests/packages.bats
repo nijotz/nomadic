@@ -160,10 +160,34 @@ EOF
   unset -f nix
 }
 
-@test "snapshot_installed_packages parses nix profile list output" {
+@test "snapshot_installed_packages parses older nix profile list output (no Name)" {
   local stub_dir="$TEST_DIR/stub"
   mkdir -p "$stub_dir"
-  # Simulate `nix profile list` output: Name: lines use ANSI bold
+  # Older nix (e.g. 2.18) omits Name: entirely
+  cat >"$stub_dir/nix" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "profile list" ]]; then
+  printf 'Index:              0\n'
+  printf 'Flake attribute:    legacyPackages.x86_64-linux.fzf\n'
+  printf 'Original flake URL: flake:nixpkgs\n'
+  printf '\n'
+  printf 'Index:              1\n'
+  printf 'Flake attribute:    legacyPackages.x86_64-linux.git\n'
+  printf 'Original flake URL: flake:nixpkgs\n'
+fi
+STUB
+  chmod +x "$stub_dir/nix"
+
+  detect_pkg_manager() { echo "nix"; }
+  PATH="$stub_dir:$PATH" snapshot_installed_packages
+  [ "$(echo "$_installed_pkgs" | sed -n '1p')" = "fzf" ]
+  [ "$(echo "$_installed_pkgs" | sed -n '2p')" = "git" ]
+}
+
+@test "snapshot_installed_packages parses newer nix profile list output (with Name)" {
+  local stub_dir="$TEST_DIR/stub"
+  mkdir -p "$stub_dir"
+  # Newer nix emits ANSI-bolded Name: lines alongside Flake attribute:
   cat >"$stub_dir/nix" <<'STUB'
 #!/usr/bin/env bash
 if [[ "$1 $2" == "profile list" ]]; then
