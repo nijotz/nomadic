@@ -266,6 +266,72 @@ EOF
   [ "${lines[1]}" = "ripgrep" ]
 }
 
+@test "install_all_packages logs already-installed packages and only installs missing" {
+  mkdir -p "$TEST_CONFIG/packages"
+  cat >"$TEST_CONFIG/packages/packages" <<'EOF'
+htop
+jq
+ripgrep
+EOF
+
+  # Save the real functions under orig_* names so we can restore them after
+  # the test. `declare -f F` prints F's source; sed rewrites the name; eval
+  # registers the renamed copy. Restored at the bottom of the test.
+  eval "$(declare -f detect_pkg_manager | sed 's/detect_pkg_manager/orig_detect_pkg_manager/')"
+  eval "$(declare -f install_packages | sed 's/install_packages/orig_install_packages/')"
+
+  detect_pkg_manager() { echo "brew"; }
+  install_packages() {
+    shift
+    echo "INSTALLED: $*"
+  }
+  # Pretend htop and jq are already installed; ripgrep is missing
+  _installed_pkgs=$'htop\njq'
+  _installed_casks=""
+
+  g_current_os="linux"
+  run install_all_packages
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Packages already installed: htop jq"* ]]
+  [[ "$output" == *"INSTALLED: ripgrep"* ]]
+  [[ "$output" != *"INSTALLED: htop"* ]]
+  [[ "$output" != *"INSTALLED: jq"* ]]
+
+  # Restore originals by renaming the saved orig_* copies back
+  eval "$(declare -f orig_detect_pkg_manager | sed 's/orig_detect_pkg_manager/detect_pkg_manager/')"
+  eval "$(declare -f orig_install_packages | sed 's/orig_install_packages/install_packages/')"
+}
+
+@test "install_all_packages skips install entirely when all packages installed" {
+  mkdir -p "$TEST_CONFIG/packages"
+  cat >"$TEST_CONFIG/packages/packages" <<'EOF'
+htop
+jq
+EOF
+
+  # Save the real functions under orig_* names; restored at bottom of test
+  eval "$(declare -f detect_pkg_manager | sed 's/detect_pkg_manager/orig_detect_pkg_manager/')"
+  eval "$(declare -f install_packages | sed 's/install_packages/orig_install_packages/')"
+
+  detect_pkg_manager() { echo "brew"; }
+  install_packages() {
+    shift
+    echo "INSTALLED: $*"
+  }
+  _installed_pkgs=$'htop\njq'
+  _installed_casks=""
+
+  g_current_os="linux"
+  run install_all_packages
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Packages already installed: htop jq"* ]]
+  [[ "$output" != *"INSTALLED:"* ]]
+
+  # Restore originals
+  eval "$(declare -f orig_detect_pkg_manager | sed 's/orig_detect_pkg_manager/detect_pkg_manager/')"
+  eval "$(declare -f orig_install_packages | sed 's/orig_install_packages/install_packages/')"
+}
+
 @test "install_all_packages reads both base and OS-specific package files" {
   mkdir -p "$TEST_CONFIG/packages"
   cat >"$TEST_CONFIG/packages/packages" <<'EOF'
@@ -277,7 +343,7 @@ scroll-reverser
 alt-tab
 EOF
 
-  # Save originals
+  # Save the real functions under orig_* names; restored at bottom of test
   eval "$(declare -f detect_pkg_manager | sed 's/detect_pkg_manager/orig_detect_pkg_manager/')"
   eval "$(declare -f install_packages | sed 's/install_packages/orig_install_packages/')"
 
