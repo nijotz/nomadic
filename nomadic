@@ -850,13 +850,19 @@ install_all_packages() {
   done < <(resolve_packages "$map_file" "${all_pkgs[@]}")
 
   # Skip packages already installed (snapshot was taken earlier in cmd_apply)
-  local -a missing=()
+  local -a missing=() already=()
   local pkg
   for pkg in "${resolved[@]}"; do
-    if ! is_pkg_installed "$pkg"; then
+    if is_pkg_installed "$pkg"; then
+      already+=("$pkg")
+    else
       missing+=("$pkg")
     fi
   done
+
+  if ((${#already[@]} > 0)); then
+    log "Packages already installed: ${already[*]}"
+  fi
 
   if ((${#missing[@]} > 0)); then
     install_packages "$pkg_manager" "${missing[@]}"
