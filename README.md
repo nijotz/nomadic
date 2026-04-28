@@ -2,7 +2,7 @@
 
 Portable shell environment manager. One bash script, no dependencies. Previously known as nomad until hashicorp took my name (lawsuit pending).
 
-nomadic separates the **engine** (this script) from the **config** (your personal repo of dotfiles, shell config, scripts, and packages). Point it at a git repo, and your environment is ready.
+nomadic separates the **engine** (this script) from the **bindle** (your personal repo of dotfiles, shell config, scripts, and packages). Point it at a git repo, and your environment is ready.
 
 ## Install
 
@@ -13,37 +13,37 @@ curl -fsSL https://raw.githubusercontent.com/nijotz/nomadic/main/install.sh | ba
 ## Quick start
 
 ```bash
-# Apply a config repo directly
+# Apply a bindle directly
 nomadic apply https://github.com/you/dotfiles
 
 # Next time, just:
 nomadic apply
 ```
 
-The config repo is cloned to `~/.nomadic/config/`. Subsequent `apply` calls pull the latest changes automatically.
+The bindle is cloned to `~/.nomadic/bindle/`. Subsequent `apply` calls pull the latest changes automatically.
 
 ## Starting from scratch
 
 ```bash
-# Scaffold a new config directory
-nomadic init ~/my-config
+# Scaffold a new bindle
+nomadic init ~/my-bindle
 
 # Apply it
-nomadic apply ~/my-config
+nomadic apply ~/my-bindle
 ```
 
 ## How it works
 
-1. Discovers modules in your config's `modules/` directory
+1. Discovers modules in your bindle's `modules/` directory
 2. Parses dependency ordering (`after:`) and topologically sorts them
 3. Filters by OS and checks command requirements
 4. For each module in order: installs packages, runs setup scripts, creates symlinks, collects shell config
 5. Writes a generated rc file and adds a source line to your shell rc
 
-## Config directory structure
+## Bindle structure
 
 ```
-my-config/
+my-bindle/
   modules/
     path/
       bash              # shell config (static text, appended to rc)
@@ -89,9 +89,9 @@ All directives are optional. No `deps` file = no constraints.
 ## Commands
 
 ```
-nomadic init [path]              Scaffold a new config directory
-nomadic apply [path|url] [-P] [-f]  Apply config
-  Accepts a local path or git URL (clones to ~/.nomadic/config/)
+nomadic init [path]              Scaffold a new bindle
+nomadic apply [path|url] [-P] [-f]  Apply bindle
+  Accepts a local path or git URL (clones to ~/.nomadic/bindle/)
   Remembers the path for subsequent runs
   -P, --no-packages              Skip bulk package install
   -f, --force                    Overwrite existing files when linking (backs up originals)

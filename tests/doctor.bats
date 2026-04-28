@@ -3,12 +3,12 @@ load test_helper/common
 
 setup() {
   TEST_DIR="$(mktemp -d)"
-  TEST_CONFIG="$TEST_DIR/config"
+  TEST_BINDLE="$TEST_DIR/config"
   NOMADIC_DIR="$TEST_DIR/nomadic"
   ORIG_HOME="$HOME"
   HOME="$TEST_DIR/home"
   mkdir -p "$HOME"
-  mkdir -p "$TEST_CONFIG/modules"
+  mkdir -p "$TEST_BINDLE/modules"
 }
 
 teardown() {
@@ -21,14 +21,14 @@ teardown() {
 @test "check_deps: passes with valid deps" {
   create_module "alpha"
   create_module "beta" "after: alpha"
-  setup_global_state "$TEST_CONFIG"
+  setup_global_state "$TEST_BINDLE"
   run check_deps
   [ "$status" -eq 0 ]
 }
 
 @test "check_deps: warns on unknown after: target" {
   create_module "mymod" "after: nonexistent"
-  setup_global_state "$TEST_CONFIG"
+  setup_global_state "$TEST_BINDLE"
   run check_deps
   [ "$status" -eq 1 ]
   [[ "$output" == *"unknown module 'nonexistent'"* ]]
@@ -37,7 +37,7 @@ teardown() {
 @test "check_deps: warns on dependency cycle" {
   create_module "alpha" "after: beta"
   create_module "beta" "after: alpha"
-  setup_global_state "$TEST_CONFIG"
+  setup_global_state "$TEST_BINDLE"
   run check_deps
   [ "$status" -eq 1 ]
   [[ "$output" == *"cycle"* ]]
@@ -47,19 +47,19 @@ teardown() {
 
 @test "check_links: passes when symlinks are correct" {
   create_module "mymod"
-  echo "content" >"$TEST_CONFIG/modules/mymod/myrc"
-  printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_CONFIG/modules/mymod/links"
-  ln -s "$TEST_CONFIG/modules/mymod/myrc" "$HOME/.myrc"
-  setup_global_state "$TEST_CONFIG"
+  echo "content" >"$TEST_BINDLE/modules/mymod/myrc"
+  printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
+  ln -s "$TEST_BINDLE/modules/mymod/myrc" "$HOME/.myrc"
+  setup_global_state "$TEST_BINDLE"
   run check_links
   [ "$status" -eq 0 ]
 }
 
 @test "check_links: warns on missing symlink" {
   create_module "mymod"
-  echo "content" >"$TEST_CONFIG/modules/mymod/myrc"
-  printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_CONFIG/modules/mymod/links"
-  setup_global_state "$TEST_CONFIG"
+  echo "content" >"$TEST_BINDLE/modules/mymod/myrc"
+  printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
+  setup_global_state "$TEST_BINDLE"
   run check_links
   [ "$status" -eq 1 ]
   [[ "$output" == *"missing"* ]]
@@ -67,10 +67,10 @@ teardown() {
 
 @test "check_links: warns when target is a regular file" {
   create_module "mymod"
-  echo "content" >"$TEST_CONFIG/modules/mymod/myrc"
-  printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_CONFIG/modules/mymod/links"
+  echo "content" >"$TEST_BINDLE/modules/mymod/myrc"
+  printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
   echo "not a symlink" >"$HOME/.myrc"
-  setup_global_state "$TEST_CONFIG"
+  setup_global_state "$TEST_BINDLE"
   run check_links
   [ "$status" -eq 1 ]
   [[ "$output" == *"not a symlink"* ]]
@@ -78,10 +78,10 @@ teardown() {
 
 @test "check_links: warns when symlink points to wrong target" {
   create_module "mymod"
-  echo "content" >"$TEST_CONFIG/modules/mymod/myrc"
-  printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_CONFIG/modules/mymod/links"
+  echo "content" >"$TEST_BINDLE/modules/mymod/myrc"
+  printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
   ln -s "/wrong/target" "$HOME/.myrc"
-  setup_global_state "$TEST_CONFIG"
+  setup_global_state "$TEST_BINDLE"
   run check_links
   [ "$status" -eq 1 ]
   [[ "$output" == *"points to"* ]]
@@ -89,7 +89,7 @@ teardown() {
 
 @test "check_links: passes with no links files" {
   create_module "mymod"
-  setup_global_state "$TEST_CONFIG"
+  setup_global_state "$TEST_BINDLE"
   run check_links
   [ "$status" -eq 0 ]
 }
@@ -98,8 +98,8 @@ teardown() {
 
 @test "check_rc: passes when rc file exists and bashrc is infected" {
   mkdir -p "$NOMADIC_DIR"
-  echo "generated" >"$NOMADIC_DIR/config.bash"
-  echo "source $NOMADIC_DIR/config.bash  # NOMADIC_MANAGED" >"$HOME/.bashrc"
+  echo "generated" >"$NOMADIC_DIR/rc.bash"
+  echo "source $NOMADIC_DIR/rc.bash  # NOMADIC_MANAGED" >"$HOME/.bashrc"
 
   run check_rc
   [ "$status" -eq 0 ]
@@ -113,7 +113,7 @@ teardown() {
 
 @test "check_rc: warns when bashrc not sourcing nomadic" {
   mkdir -p "$NOMADIC_DIR"
-  echo "generated" >"$NOMADIC_DIR/config.bash"
+  echo "generated" >"$NOMADIC_DIR/rc.bash"
   echo "# nothing here" >"$HOME/.bashrc"
 
   run check_rc
@@ -151,10 +151,10 @@ STUB
 
 @test "cmd_doctor: reports all good on healthy config" {
   create_module "mymod"
-  printf 'export FOO="bar"\n' >"$TEST_CONFIG/modules/mymod/bash"
+  printf 'export FOO="bar"\n' >"$TEST_BINDLE/modules/mymod/bash"
   mkdir -p "$NOMADIC_DIR"
-  echo "generated" >"$NOMADIC_DIR/config.bash"
-  echo "source $NOMADIC_DIR/config.bash  # NOMADIC_MANAGED" >"$HOME/.bashrc"
+  echo "generated" >"$NOMADIC_DIR/rc.bash"
+  echo "source $NOMADIC_DIR/rc.bash  # NOMADIC_MANAGED" >"$HOME/.bashrc"
 
   # Stub out detect_pkg_manager so check_pkg_manager doesn't hit real nix
   local stub_dir="$TEST_DIR/stub"
@@ -164,7 +164,7 @@ STUB
   detect_pkg_manager() { echo "apt"; }
   export -f detect_pkg_manager
 
-  run cmd_doctor "$TEST_CONFIG"
+  run cmd_doctor "$TEST_BINDLE"
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"Everything looks good"* ]]
@@ -174,8 +174,8 @@ STUB
 
 @test "cmd_doctor: reports issues" {
   create_module "mymod" "after: nonexistent"
-  printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_CONFIG/modules/mymod/links"
-  run cmd_doctor "$TEST_CONFIG"
+  printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
+  run cmd_doctor "$TEST_BINDLE"
   [ "$status" -eq 1 ]
   [[ "$output" == *"issue(s) found"* ]]
 }

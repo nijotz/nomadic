@@ -29,38 +29,38 @@ teardown() {
   rm -rf "$TEST_DIR"
 }
 
-@test "setup_config_repo: clones repo to NOMADIC_DIR/config" {
-  setup_config_repo "$REMOTE_REPO"
+@test "setup_bindle_repo: clones repo to NOMADIC_DIR/config" {
+  setup_bindle_repo "$REMOTE_REPO"
 
-  [ "$g_config_dir" = "$NOMADIC_DIR/config" ]
-  [ -d "$NOMADIC_DIR/config/.git" ]
-  [ -f "$NOMADIC_DIR/config/modules/test/bash" ]
+  [ "$g_bindle_dir" = "$NOMADIC_DIR/bindle" ]
+  [ -d "$NOMADIC_DIR/bindle/.git" ]
+  [ -f "$NOMADIC_DIR/bindle/modules/test/bash" ]
 }
 
-@test "setup_config_repo: persists path to state file" {
-  setup_config_repo "$REMOTE_REPO"
+@test "setup_bindle_repo: persists path to state file" {
+  setup_bindle_repo "$REMOTE_REPO"
 
-  [ -f "$NOMADIC_DIR/state/config-path" ]
-  [ "$(cat "$NOMADIC_DIR/state/config-path")" = "$NOMADIC_DIR/config" ]
+  [ -f "$NOMADIC_DIR/state/bindle-path" ]
+  [ "$(cat "$NOMADIC_DIR/state/bindle-path")" = "$NOMADIC_DIR/bindle" ]
 }
 
-@test "setup_config_repo: errors if repo already exists with same URL" {
-  setup_config_repo "$REMOTE_REPO"
+@test "setup_bindle_repo: errors if repo already exists with same URL" {
+  setup_bindle_repo "$REMOTE_REPO"
 
-  run setup_config_repo "$REMOTE_REPO"
+  run setup_bindle_repo "$REMOTE_REPO"
   [ "$status" -ne 0 ]
   [[ "$output" == *"already set up"* ]]
 }
 
-@test "setup_config_repo: errors if remote URL differs" {
-  setup_config_repo "$REMOTE_REPO"
+@test "setup_bindle_repo: errors if remote URL differs" {
+  setup_bindle_repo "$REMOTE_REPO"
 
-  run setup_config_repo "/some/other/repo"
+  run setup_bindle_repo "/some/other/repo"
   [ "$status" -ne 0 ]
   [[ "$output" == *"points to"* ]]
 }
 
-@test "setup_config_repo: clones with submodules" {
+@test "setup_bindle_repo: clones with submodules" {
   # Create a repo to use as a submodule
   SUB_REPO="$TEST_DIR/sub.git"
   git init --bare "$SUB_REPO" 2>/dev/null
@@ -76,7 +76,7 @@ teardown() {
   git -C "$WORK_DIR" commit -m "add submodule" 2>/dev/null
   git -C "$WORK_DIR" push 2>/dev/null
 
-  setup_config_repo "$REMOTE_REPO"
+  setup_bindle_repo "$REMOTE_REPO"
 
-  [ -f "$NOMADIC_DIR/config/modules/sub/data.txt" ]
+  [ -f "$NOMADIC_DIR/bindle/modules/sub/data.txt" ]
 }

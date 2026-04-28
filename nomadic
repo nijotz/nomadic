@@ -16,7 +16,7 @@ g_module_after=()
 g_module_pkg=()
 g_module_os=()
 
-g_config_dir=""
+g_bindle_dir=""
 g_current_os=""
 
 # --- Colors ------------------------------------------------------------------
@@ -126,7 +126,7 @@ detect_os() {
 
 # Modules are non-dotfile folders in the modules directory
 discover_modules() {
-  local modules_dir="$g_config_dir/modules"
+  local modules_dir="$g_bindle_dir/modules"
 
   if [[ ! -d "$modules_dir" ]]; then
     error "No modules directory found at $modules_dir"
@@ -157,7 +157,7 @@ load_modules() {
 
   local module
   for module in $modules; do
-    local deps_file="$g_config_dir/modules/$module/deps"
+    local deps_file="$g_bindle_dir/modules/$module/deps"
     local after=""
     local pkg=""
     local os=""
@@ -238,17 +238,17 @@ filter_by_os() {
   g_module_os=("${new_os[@]+"${new_os[@]}"}")
 }
 
-# Set g_config_dir from the given arg, or resolve it from remembered state.
-setup_config_dir() {
+# Set g_bindle_dir from the given arg, or resolve it from remembered state.
+setup_bindle_dir() {
   if [[ -z "${1:-}" ]]; then
-    g_config_dir="$(resolve_config_dir)"
+    g_bindle_dir="$(resolve_bindle_dir)"
   else
-    g_config_dir="$1"
+    g_bindle_dir="$1"
   fi
 }
 
 # Detect the current OS and load module data filtered by OS.
-# Requires g_config_dir to be set first.
+# Requires g_bindle_dir to be set first.
 setup_modules() {
   g_current_os="$(detect_os)"
   load_modules
@@ -256,10 +256,10 @@ setup_modules() {
 }
 
 # Convenience wrapper for callers that don't need to interleave work between
-# resolving the config dir and loading modules (e.g. doctor). cmd_apply needs
+# resolving the bindle dir and loading modules (e.g. doctor). cmd_apply needs
 # to pull the repo between the two, so it calls them separately.
 setup_global_state() {
-  setup_config_dir "${1:-}"
+  setup_bindle_dir "${1:-}"
   setup_modules
 }
 
@@ -268,7 +268,7 @@ setup_global_state() {
 # (e.g., install homebrew and update PATH).
 run_setup() {
   local mod="$1"
-  local setup_file="$g_config_dir/modules/$mod/setup"
+  local setup_file="$g_bindle_dir/modules/$mod/setup"
 
   if [[ ! -f "$setup_file" ]]; then
     return 0
@@ -287,13 +287,13 @@ run_setup() {
 process_links() {
   local mod="$1"
   local force="${2:-0}"
-  local links_file="$g_config_dir/modules/$mod/links"
+  local links_file="$g_bindle_dir/modules/$mod/links"
 
   if [[ ! -f "$links_file" ]]; then
     return 0
   fi
 
-  local module_dir="$g_config_dir/modules/$mod"
+  local module_dir="$g_bindle_dir/modules/$mod"
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     line="$(trim_comment "$line")"
@@ -336,21 +336,21 @@ process_links() {
   done <"$links_file"
 }
 
-# Collect shell config for a module. Outputs the config content to stdout.
+# Collect shell rc for a module. Outputs the rc file content to stdout.
 # Non-executable files are concatenated verbatim. Executable files are
 # run and their stdout is captured (they inherit the current environment,
 # so prior modules' exports are visible).
-collect_shell_config() {
+collect_shell_rc() {
   local mod="$1"
   local shell="$2"
   local os="$g_current_os"
-  local config_file="$g_config_dir/modules/$mod/$shell.$os"
+  local rc_file="$g_bindle_dir/modules/$mod/$shell.$os"
 
-  if [[ -z "$os" ]] || [[ ! -f "$config_file" ]]; then
-    config_file="$g_config_dir/modules/$mod/$shell"
+  if [[ -z "$os" ]] || [[ ! -f "$rc_file" ]]; then
+    rc_file="$g_bindle_dir/modules/$mod/$shell"
   fi
 
-  if [[ ! -f "$config_file" ]]; then
+  if [[ ! -f "$rc_file" ]]; then
     return 0
   fi
 
@@ -362,10 +362,10 @@ collect_shell_config() {
   dashes="${dashes// /-}"
   echo "${header}${dashes}"
 
-  if [[ -x "$config_file" ]]; then
-    "$config_file"
+  if [[ -x "$rc_file" ]]; then
+    "$rc_file"
   else
-    cat "$config_file"
+    cat "$rc_file"
   fi
 
   echo ""
@@ -373,7 +373,7 @@ collect_shell_config() {
 
 # --- Topological Sort ---------------------------------------------------------
 
-# Topological sort using Kahn's algorithm (BFS-based).
+# Topological sort using Kahn's algorithm (breadth first).
 #
 # Reads from the global arrays populated by load_modules:
 #   g_module_name[]    - module names
@@ -383,8 +383,9 @@ collect_shell_config() {
 # constraint between them are sorted alphabetically for determinism.
 #
 # Detects cycles: if not all modules can be placed, reports which are stuck.
+#
 # Unknown dependencies (e.g. "after: homebrew" when homebrew isn't in the
-# module list) are warned about and skipped - this keeps configs portable
+# module list) are warned about and skipped. This keeps modules portable
 # across machines where some modules may not exist.
 toposort() {
   local count=${#g_module_name[@]}
@@ -497,7 +498,7 @@ toposort() {
 # Reads content from stdin. Creates the state directory if needed.
 generate_rc() {
   local shell="$1"
-  local rc_file="$NOMADIC_DIR/config.$shell"
+  local rc_file="$NOMADIC_DIR/rc.$shell"
 
   mkdir -p "$NOMADIC_DIR"
 
@@ -584,7 +585,7 @@ infect_rc() {
     *) error "Unknown shell: $shell" ;;
   esac
 
-  local source_line="source $NOMADIC_DIR/config.$shell  # NOMADIC_MANAGED"
+  local source_line="source $NOMADIC_DIR/rc.$shell  # NOMADIC_MANAGED"
 
   for rc_file in "${rc_files[@]}"; do
     # Already infected - skip
@@ -774,7 +775,7 @@ is_pkg_installed() {
 
 # Install a module's pkg: packages, skipping any already installed.
 install_module_packages() {
-  local config_dir="$1"
+  local bindle_dir="$1"
   local mod="$2"
 
   [[ -z "$_pkg_manager" ]] && return 0
@@ -787,7 +788,7 @@ install_module_packages() {
   local pkgs="${g_module_pkg[$idx]}"
   [[ -z "$pkgs" ]] && return 0
 
-  local map_file="$g_config_dir/packages/$_pkg_manager.map"
+  local map_file="$g_bindle_dir/packages/$_pkg_manager.map"
   local -a missing=()
   local pkg
   for pkg in $pkgs; do
@@ -833,7 +834,7 @@ install_all_packages() {
   done < <(collect_packages)
 
   # Read base package list
-  local pkg_list="$g_config_dir/packages/packages"
+  local pkg_list="$g_bindle_dir/packages/packages"
   if [[ -f "$pkg_list" ]]; then
     while IFS= read -r pkg; do
       [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
@@ -841,10 +842,10 @@ install_all_packages() {
   fi
 
   # Read OS-specific package list
-  if [[ -n "$os" && -f "$g_config_dir/packages/packages.$os" ]]; then
+  if [[ -n "$os" && -f "$g_bindle_dir/packages/packages.$os" ]]; then
     while IFS= read -r pkg; do
       [[ -n "$pkg" ]] && all_pkgs+=("$pkg")
-    done < <(read_package_list "$g_config_dir/packages/packages.$os")
+    done < <(read_package_list "$g_bindle_dir/packages/packages.$os")
   fi
 
   if ((${#all_pkgs[@]} == 0)); then
@@ -852,7 +853,7 @@ install_all_packages() {
   fi
 
   # Resolve through map file
-  local map_file="$g_config_dir/packages/$pkg_manager.map"
+  local map_file="$g_bindle_dir/packages/$pkg_manager.map"
   local -a resolved=()
   while IFS= read -r pkg; do
     [[ -n "$pkg" ]] && resolved+=("$pkg")
@@ -881,13 +882,13 @@ install_all_packages() {
 # --- Init ---------------------------------------------------------------------
 
 cmd_init() {
-  local target="${1:-$NOMADIC_DIR/config}"
+  local target="${1:-$NOMADIC_DIR/bindle}"
 
   if [[ -d "$target/modules" ]]; then
-    error "Config directory already exists at $target/modules"
+    error "Bindle already exists at $target/modules"
   fi
 
-  log "Initializing nomadic config at $target"
+  log "Initializing bindle at $target"
 
   mkdir -p "$target/modules/path"
   mkdir -p "$target/modules/aliases"
@@ -970,9 +971,9 @@ PACKAGES
 
   # -- README --
   cat >"$target/README.md" <<'README'
-# Nomadic Config
+# Nomadic Bindle
 
-This is a [nomadic](https://github.com/nijotz/nomadic) configuration repo - a portable shell environment you can apply on any machine.
+This is a [nomadic](https://github.com/nijotz/nomadic) bindle - a portable shell environment you can apply on any machine.
 
 ## Structure
 
@@ -991,7 +992,7 @@ profiles/         Named sets of modules to enable/disable per machine
 ## Usage
 
 ```bash
-# Apply this config on a new machine
+# Apply this bindle on a new machine
 nomadic apply <path-or-git-url>
 
 # Re-apply after making changes
@@ -1001,10 +1002,10 @@ nomadic apply
 See `nomadic help` for all commands.
 README
 
-  g_config_dir="$target"
-  setup_config_state
+  g_bindle_dir="$target"
+  setup_bindle_state
 
-  log "Created config at $target with modules: path, color, aliases, prompt, git"
+  log "Created bindle at $target with modules: path, color, aliases, prompt, git"
   log ""
   log "What's inside:"
   log "  modules/path      - PATH setup"
@@ -1017,7 +1018,7 @@ README
   log "To apply:  nomadic apply"
 }
 
-# --- Config Repo --------------------------------------------------------------
+# --- Bindle -------------------------------------------------------------------
 
 # Check if a string looks like a git URL.
 is_git_url() {
@@ -1027,34 +1028,34 @@ is_git_url() {
   esac
 }
 
-# Persist g_config_dir to state so future bare `nomadic apply` invocations
+# Persist g_bindle_dir to state so future bare `nomadic apply` invocations
 # resolve to the same path.
-setup_config_state() {
+setup_bindle_state() {
   mkdir -p "$NOMADIC_DIR/state"
-  printf '%s\n' "$(cd "$g_config_dir" && pwd)" >"$NOMADIC_DIR/state/config-path"
+  printf '%s\n' "$(cd "$g_bindle_dir" && pwd)" >"$NOMADIC_DIR/state/bindle-path"
 }
 
-# Clone a config repo from a URL into $NOMADIC_DIR/config and remember the path.
-# Errors if a repo already exists at that location - to update an existing setup,
-# run `nomadic apply` without arguments.
-setup_config_repo() {
+# Clone a bindle from a URL into $NOMADIC_DIR/bindle and remember the path.
+# Errors if a bindle already exists at that location - to update an existing
+# setup, run `nomadic apply` without arguments.
+setup_bindle_repo() {
   local url="$1"
-  local repo_dir="$NOMADIC_DIR/config"
+  local repo_dir="$NOMADIC_DIR/bindle"
 
   if [[ -d "$repo_dir/.git" ]]; then
     local existing_url
     existing_url="$(git -C "$repo_dir" remote get-url origin 2>/dev/null || true)"
     if [[ "$existing_url" != "$url" ]]; then
-      error "Config repo at $repo_dir points to $existing_url, not $url"
+      error "Bindle at $repo_dir points to $existing_url, not $url"
     fi
-    error "Config repo already set up at $repo_dir. Run 'nomadic apply' (without args) to update."
+    error "Bindle already set up at $repo_dir. Run 'nomadic apply' (without args) to update."
   fi
 
-  log "Cloning config repo..."
+  log "Cloning bindle..."
   git clone --recurse-submodules "$url" "$repo_dir" >&2
 
-  g_config_dir="$repo_dir"
-  setup_config_state
+  g_bindle_dir="$repo_dir"
+  setup_bindle_state
 }
 
 # --- Apply --------------------------------------------------------------------
@@ -1063,7 +1064,7 @@ cmd_apply() {
   local skip_packages=0
   local force_links=0
   local skip_pull=0
-  local config_dir=""
+  local bindle_arg=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -1083,7 +1084,7 @@ cmd_apply() {
           esac
         done
         ;;
-      *) config_dir="$1" ;;
+      *) bindle_arg="$1" ;;
     esac
     shift
   done
@@ -1092,30 +1093,30 @@ cmd_apply() {
   # path, but don't pull. Persist the path so future bare invocations use it.
   # Bare invocation (no arg) is normal apply mode: resolve from remembered state
   # and pull.
-  if [[ -n "$config_dir" ]]; then
-    if is_git_url "$config_dir"; then
-      setup_config_repo "$config_dir"
+  if [[ -n "$bindle_arg" ]]; then
+    if is_git_url "$bindle_arg"; then
+      setup_bindle_repo "$bindle_arg"
     else
-      setup_config_dir "$config_dir"
-      setup_config_state
+      setup_bindle_dir "$bindle_arg"
+      setup_bindle_state
     fi
   else
-    setup_config_dir ""
-    # Pull latest if config is a git repo. This must happen before setup_modules
+    setup_bindle_dir ""
+    # Pull latest if bindle is a git repo. This must happen before setup_modules
     # so that newly-pulled modules are visible in the discovery scan.
-    if ((!skip_pull)) && [[ -d "$g_config_dir/.git" ]]; then
-      log "Pulling config repo..."
-      if git -C "$g_config_dir" pull --ff-only >&2; then
-        git -C "$g_config_dir" submodule update --init --recursive >&2
+    if ((!skip_pull)) && [[ -d "$g_bindle_dir/.git" ]]; then
+      log "Pulling bindle..."
+      if git -C "$g_bindle_dir" pull --ff-only >&2; then
+        git -C "$g_bindle_dir" submodule update --init --recursive >&2
       else
-        warn "Could not pull config repo, using local copy"
+        warn "Could not pull bindle, using local copy"
       fi
     fi
   fi
 
   setup_modules
 
-  log "Applying config from $g_config_dir"
+  log "Applying bindle from $g_bindle_dir"
 
   local -a filtered=()
   while IFS= read -r mod; do
@@ -1133,7 +1134,7 @@ cmd_apply() {
     snapshot_installed_packages
   fi
 
-  # Temp files for accumulating shell config
+  # Temp files for accumulating shell rc files
   local rc_bash rc_fish rc_zsh
   rc_bash="$(mktemp)"
   rc_fish="$(mktemp)"
@@ -1145,17 +1146,17 @@ cmd_apply() {
     log "Applying module: $mod"
 
     if ! ((skip_packages)); then
-      install_module_packages "$g_config_dir" "$mod"
+      install_module_packages "$g_bindle_dir" "$mod"
     fi
 
     run_setup "$mod"
     process_links "$mod" "$force_links"
 
-    ((has_bash)) && collect_shell_config "$mod" "bash" >>"$rc_bash"
-    ((has_fish)) && collect_shell_config "$mod" "fish" >>"$rc_fish"
-    ((has_zsh)) && collect_shell_config "$mod" "zsh" >>"$rc_zsh"
+    ((has_bash)) && collect_shell_rc "$mod" "bash" >>"$rc_bash"
+    ((has_fish)) && collect_shell_rc "$mod" "fish" >>"$rc_fish"
+    ((has_zsh)) && collect_shell_rc "$mod" "zsh" >>"$rc_zsh"
 
-    # Source accumulated bash config so later modules see prior exports
+    # Source accumulated bash rc file so later modules see prior exports
     if [[ -s "$rc_bash" ]]; then
       . "$rc_bash"
     fi
@@ -1189,7 +1190,7 @@ cmd_apply() {
     log "Linked nomadic -> $nomadic_bin/nomadic"
   fi
 
-  log "Shell config applied. To pick up changes: exec bash  (or restart your shell)"
+  log "Bindle applied."
 
   # Install remaining packages from flat package list (safe to ctrl-c)
   if ((skip_packages)); then
@@ -1199,70 +1200,70 @@ cmd_apply() {
     install_all_packages
   fi
 
-  check_config_drift
+  check_bindle_drift
 
   success "Done!"
 }
 
 # --- Status / Drift Detection -------------------------------------------------
 
-# Check a config directory for drift: uncommitted changes, unpushed commits,
-# or commits behind origin. Only runs if the config dir is a git repo.
+# Check a bindle for drift: uncommitted changes, unpushed commits,
+# or commits behind origin. Only runs if the bindle is a git repo.
 # Returns 0 if clean or not a git repo, 1 if drift detected.
-check_config_drift() {
-  if [[ ! -d "$g_config_dir/.git" ]]; then
+check_bindle_drift() {
+  if [[ ! -d "$g_bindle_dir/.git" ]]; then
     return 0
   fi
 
   local drift=0
 
   # Uncommitted changes (staged or unstaged)
-  if ! git -C "$g_config_dir" diff --quiet 2>/dev/null \
-    || ! git -C "$g_config_dir" diff --cached --quiet 2>/dev/null; then
-    warn "Config has uncommitted changes: $g_config_dir"
+  if ! git -C "$g_bindle_dir" diff --quiet 2>/dev/null \
+    || ! git -C "$g_bindle_dir" diff --cached --quiet 2>/dev/null; then
+    warn "Bindle has uncommitted changes: $g_bindle_dir"
     drift=1
   fi
 
   # Untracked files
   local untracked
-  untracked="$(git -C "$g_config_dir" ls-files --others --exclude-standard 2>/dev/null)"
+  untracked="$(git -C "$g_bindle_dir" ls-files --others --exclude-standard 2>/dev/null)"
   if [[ -n "$untracked" ]]; then
-    warn "Config has untracked files: $g_config_dir"
+    warn "Bindle has untracked files: $g_bindle_dir"
     drift=1
   fi
 
   # Check against remote (only if we have a remote and can fetch)
   local remote_branch
-  remote_branch="$(git -C "$g_config_dir" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)" || return $drift
+  remote_branch="$(git -C "$g_bindle_dir" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)" || return $drift
 
-  git -C "$g_config_dir" fetch --quiet 2>/dev/null || return $drift
+  git -C "$g_bindle_dir" fetch --quiet 2>/dev/null || return $drift
 
   # Unpushed commits
   local ahead
-  ahead="$(git -C "$g_config_dir" rev-list --count '@{u}..HEAD' 2>/dev/null)"
+  ahead="$(git -C "$g_bindle_dir" rev-list --count '@{u}..HEAD' 2>/dev/null)"
   if [[ -n "$ahead" ]] && ((ahead > 0)); then
-    warn "Config has $ahead unpushed commit(s): $g_config_dir"
+    warn "Bindle has $ahead unpushed commit(s): $g_bindle_dir"
     drift=1
   fi
 
   # Behind remote
   local behind
-  behind="$(git -C "$g_config_dir" rev-list --count 'HEAD..@{u}' 2>/dev/null)"
+  behind="$(git -C "$g_bindle_dir" rev-list --count 'HEAD..@{u}' 2>/dev/null)"
   if [[ -n "$behind" ]] && ((behind > 0)); then
-    warn "Config is $behind commit(s) behind remote: $g_config_dir"
+    warn "Bindle is $behind commit(s) behind remote: $g_bindle_dir"
     drift=1
   fi
 
   return $drift
 }
 
-# Resolve the config directory from remembered state or default.
-resolve_config_dir() {
-  local remembered="$NOMADIC_DIR/state/config-path"
+# Resolve the bindle directory from remembered state or default.
+resolve_bindle_dir() {
+  local remembered="$NOMADIC_DIR/state/bindle-path"
   if [[ -f "$remembered" ]]; then
     cat "$remembered"
   else
-    echo "$NOMADIC_DIR/config"
+    echo "$NOMADIC_DIR/bindle"
   fi
 }
 
@@ -1306,16 +1307,16 @@ cmd_update() {
 }
 
 cmd_status() {
-  local g_config_dir="${1:-$(resolve_config_dir)}"
+  local g_bindle_dir="${1:-$(resolve_bindle_dir)}"
 
-  if [[ ! -d "$g_config_dir" ]]; then
-    error "Config directory not found: $g_config_dir"
+  if [[ ! -d "$g_bindle_dir" ]]; then
+    error "Bindle not found: $g_bindle_dir"
   fi
 
-  log "Checking config: $g_config_dir"
+  log "Checking bindle: $g_bindle_dir"
 
-  if check_config_drift; then
-    log "Config is clean"
+  if check_bindle_drift; then
+    log "Bindle is clean"
   fi
 }
 
@@ -1327,8 +1328,8 @@ check_links() {
   local issues=0
 
   for mod in "${g_module_name[@]}"; do
-    local links_file="$g_config_dir/modules/$mod/links"
-    local module_dir="$g_config_dir/modules/$mod"
+    local links_file="$g_bindle_dir/modules/$mod/links"
+    local module_dir="$g_bindle_dir/modules/$mod"
 
     [[ -f "$links_file" ]] || continue
 
@@ -1395,10 +1396,10 @@ check_deps() {
 check_rc() {
   local issues=0
 
-  if [[ -f "$NOMADIC_DIR/config.bash" ]]; then
-    log "RC file: $NOMADIC_DIR/config.bash"
+  if [[ -f "$NOMADIC_DIR/rc.bash" ]]; then
+    log "RC file: $NOMADIC_DIR/rc.bash"
   else
-    warn "No generated RC file found at $NOMADIC_DIR/config.bash"
+    warn "No generated RC file found at $NOMADIC_DIR/rc.bash"
     ((issues += 1))
   fi
 
@@ -1438,19 +1439,19 @@ cmd_doctor() {
 
   setup_global_state "${1:-}"
 
-  if [[ ! -d "$g_config_dir" ]]; then
-    error "Config directory not found: $g_config_dir"
+  if [[ ! -d "$g_bindle_dir" ]]; then
+    error "Bindle not found: $g_bindle_dir"
   fi
-  if [[ ! -d "$g_config_dir/modules" ]]; then
-    error "No modules directory at $g_config_dir/modules"
+  if [[ ! -d "$g_bindle_dir/modules" ]]; then
+    error "No modules directory at $g_bindle_dir/modules"
   fi
-  log "Config: $g_config_dir"
+  log "Bindle: $g_bindle_dir"
 
   check_deps || ((issues += 1))
   check_links || ((issues += 1))
   check_rc || ((issues += 1))
   check_pkg_manager || ((issues += 1))
-  check_config_drift || ((issues += 1))
+  check_bindle_drift || ((issues += 1))
 
   if ((issues == 0)); then
     success "Everything looks good!"
@@ -1470,15 +1471,15 @@ nomadic - portable shell environment manager
 Usage: nomadic <command> [args]
 
 Commands:
-  init [path]          Scaffold a new config directory (default: ~/.nomadic/config/)
-  apply [path|url] [-L] [-P] [-f]  Apply config: resolve deps, install packages, link files
-                         Accepts a local path or git URL (clones to ~/.nomadic/config/)
-                         -L, --no-pull      Local config only; skip pulling
+  init [path]          Scaffold a new bindle (default: ~/.nomadic/bindle/)
+  apply [path|url] [-L] [-P] [-f]  Apply bindle: resolve deps, install packages, link files
+                         Accepts a local path or git URL (clones to ~/.nomadic/bindle/)
+                         -L, --no-pull      Local bindle only; skip pulling
                          -P, --no-packages  Skip bulk package install
                          -f, --force        Overwrite existing files when linking (backs up originals)
-  status [path]        Check config for uncommitted changes, unpushed/behind remote
+  status [path]        Check bindle for uncommitted changes, unpushed/behind remote
   update               Update nomadic to the latest version from GitHub
-  doctor [path]        Validate config, check symlinks, deps, and drift
+  doctor [path]        Validate bindle, check symlinks, deps, and drift
   help                 Show this help
   version              Show version
 

@@ -6,7 +6,7 @@ load test_helper/common
   create_module "alpha"
   create_module "bravo"
 
-  result="$(run_toposort "$TEST_CONFIG" charlie alpha bravo)"
+  result="$(run_toposort "$TEST_BINDLE" charlie alpha bravo)"
   [ "$(echo "$result" | sed -n '1p')" = "alpha" ]
   [ "$(echo "$result" | sed -n '2p')" = "bravo" ]
   [ "$(echo "$result" | sed -n '3p')" = "charlie" ]
@@ -17,7 +17,7 @@ load test_helper/common
   create_module "packages" "after: homebrew"
   create_module "gnu-sed" "after: packages"
 
-  result="$(run_toposort "$TEST_CONFIG" gnu-sed homebrew packages)"
+  result="$(run_toposort "$TEST_BINDLE" gnu-sed homebrew packages)"
   [ "$(echo "$result" | sed -n '1p')" = "homebrew" ]
   [ "$(echo "$result" | sed -n '2p')" = "packages" ]
   [ "$(echo "$result" | sed -n '3p')" = "gnu-sed" ]
@@ -29,7 +29,7 @@ load test_helper/common
   create_module "C" "after: A"
   create_module "D" "after: B C"
 
-  result="$(run_toposort "$TEST_CONFIG" D C B A)"
+  result="$(run_toposort "$TEST_BINDLE" D C B A)"
   [ "$(echo "$result" | sed -n '1p')" = "A" ]
   [ "$(echo "$result" | sed -n '2p')" = "B" ]
   [ "$(echo "$result" | sed -n '3p')" = "C" ]
@@ -63,14 +63,14 @@ load test_helper/common
   create_module "alpha" "after: nonexistent"
   create_module "beta"
 
-  result="$(run_toposort "$TEST_CONFIG" alpha beta)"
+  result="$(run_toposort "$TEST_BINDLE" alpha beta)"
   [ "$(echo "$result" | wc -l | tr -d ' ')" = "2" ]
 }
 
 @test "handles single module" {
   create_module "solo"
 
-  result="$(run_toposort "$TEST_CONFIG" solo)"
+  result="$(run_toposort "$TEST_BINDLE" solo)"
   [ "$result" = "solo" ]
 }
 
@@ -94,7 +94,7 @@ os: macos"
   create_module "git" "pkg: git"
   create_module "tmux" "pkg: tmux"
 
-  result="$(run_toposort "$TEST_CONFIG" path homebrew packages color prompt gnu-sed neovim git tmux)"
+  result="$(run_toposort "$TEST_BINDLE" path homebrew packages color prompt gnu-sed neovim git tmux)"
 
   # Check ordering constraints
   homebrew_pos="$(echo "$result" | grep -n '^homebrew$' | cut -d: -f1)"

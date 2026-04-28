@@ -7,11 +7,11 @@ source "$NOMADIC_ROOT/nomadic"
 # Create a fresh temp directory for each test
 setup() {
   TEST_DIR="$(mktemp -d)"
-  TEST_CONFIG="$TEST_DIR/config"
+  TEST_BINDLE="$TEST_DIR/config"
   NOMADIC_DIR="$TEST_DIR/nomadic"
-  mkdir -p "$TEST_CONFIG/modules"
-  mkdir -p "$TEST_CONFIG/profiles"
-  g_config_dir="$TEST_CONFIG"
+  mkdir -p "$TEST_BINDLE/modules"
+  mkdir -p "$TEST_BINDLE/profiles"
+  g_bindle_dir="$TEST_BINDLE"
 }
 
 # Clean up after each test
@@ -23,9 +23,9 @@ teardown() {
 create_module() {
   local name="$1"
   local deps_content="${2:-}"
-  mkdir -p "$TEST_CONFIG/modules/$name"
+  mkdir -p "$TEST_BINDLE/modules/$name"
   if [[ -n "$deps_content" ]]; then
-    printf '%s\n' "$deps_content" >"$TEST_CONFIG/modules/$name/deps"
+    printf '%s\n' "$deps_content" >"$TEST_BINDLE/modules/$name/deps"
   fi
 }
 

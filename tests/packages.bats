@@ -44,7 +44,7 @@ EOF
   create_module "tmux" "pkg: tmux"
   create_module "vim"
 
-  load_modules "$TEST_CONFIG" "git" "tmux" "vim"
+  load_modules "$TEST_BINDLE" "git" "tmux" "vim"
   run collect_packages
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "git" ]
@@ -56,7 +56,7 @@ EOF
   create_module "alpha" "pkg: jq curl"
   create_module "beta" "pkg: curl wget"
 
-  load_modules "$TEST_CONFIG" "alpha" "beta"
+  load_modules "$TEST_BINDLE" "alpha" "beta"
   run collect_packages
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "jq" ]
@@ -68,7 +68,7 @@ EOF
 @test "collect_packages splits space-separated values" {
   create_module "multi" "pkg: htop jq curl"
 
-  load_modules "$TEST_CONFIG" "multi"
+  load_modules "$TEST_BINDLE" "multi"
   run collect_packages
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "htop" ]
@@ -267,8 +267,8 @@ EOF
 }
 
 @test "install_all_packages logs already-installed packages and only installs missing" {
-  mkdir -p "$TEST_CONFIG/packages"
-  cat >"$TEST_CONFIG/packages/packages" <<'EOF'
+  mkdir -p "$TEST_BINDLE/packages"
+  cat >"$TEST_BINDLE/packages/packages" <<'EOF'
 htop
 jq
 ripgrep
@@ -303,8 +303,8 @@ EOF
 }
 
 @test "install_all_packages skips install entirely when all packages installed" {
-  mkdir -p "$TEST_CONFIG/packages"
-  cat >"$TEST_CONFIG/packages/packages" <<'EOF'
+  mkdir -p "$TEST_BINDLE/packages"
+  cat >"$TEST_BINDLE/packages/packages" <<'EOF'
 htop
 jq
 EOF
@@ -333,12 +333,12 @@ EOF
 }
 
 @test "install_all_packages reads both base and OS-specific package files" {
-  mkdir -p "$TEST_CONFIG/packages"
-  cat >"$TEST_CONFIG/packages/packages" <<'EOF'
+  mkdir -p "$TEST_BINDLE/packages"
+  cat >"$TEST_BINDLE/packages/packages" <<'EOF'
 htop
 jq
 EOF
-  cat >"$TEST_CONFIG/packages/packages.macos" <<'EOF'
+  cat >"$TEST_BINDLE/packages/packages.macos" <<'EOF'
 scroll-reverser
 alt-tab
 EOF
@@ -375,7 +375,7 @@ EOF
   create_module "htop" "pkg: htop"
   create_module "iterm2" "$(printf 'os: macos\npkg: iterm2')"
 
-  load_modules "$TEST_CONFIG" "htop" "iterm2"
+  load_modules "$TEST_BINDLE" "htop" "iterm2"
   filter_by_os "ubuntu"
 
   run collect_packages
