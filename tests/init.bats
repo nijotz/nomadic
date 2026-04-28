@@ -61,3 +61,9 @@ load test_helper/common
   cmd_init
   [ -d "$NOMADIC_DIR/config/modules" ]
 }
+
+@test "init persists target path to state file" {
+  cmd_init "$TEST_DIR/new-config"
+  [ -f "$NOMADIC_DIR/state/config-path" ]
+  [ "$(cat "$NOMADIC_DIR/state/config-path")" = "$TEST_DIR/new-config" ]
+}

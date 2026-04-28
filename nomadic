@@ -1001,6 +1001,9 @@ nomadic apply
 See `nomadic help` for all commands.
 README
 
+  g_config_dir="$target"
+  setup_config_state
+
   log "Created config at $target with modules: path, color, aliases, prompt, git"
   log ""
   log "What's inside:"
@@ -1011,7 +1014,7 @@ README
   log "  modules/git       - gitconfig (linked to ~/.gitconfig)"
   log "  packages/         - base package list"
   log ""
-  log "To apply:  nomadic apply $target"
+  log "To apply:  nomadic apply"
 }
 
 # --- Config Repo --------------------------------------------------------------
