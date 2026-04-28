@@ -238,20 +238,29 @@ filter_by_os() {
   g_module_os=("${new_os[@]+"${new_os[@]}"}")
 }
 
-# Setup config directory (if not defined), current os, and module data filtered by OS
-# Returns 1 if no modules are found, 0 otherwise.
-setup_global_state() {
+# Set g_config_dir from the given arg, or resolve it from remembered state.
+setup_config_dir() {
   if [[ -z "${1:-}" ]]; then
     g_config_dir="$(resolve_config_dir)"
   else
     g_config_dir="$1"
   fi
+}
 
+# Detect the current OS and load module data filtered by OS.
+# Requires g_config_dir to be set first.
+setup_modules() {
   g_current_os="$(detect_os)"
-
   load_modules
-
   filter_by_os
+}
+
+# Convenience wrapper for callers that don't need to interleave work between
+# resolving the config dir and loading modules (e.g. doctor). cmd_apply needs
+# to pull the repo between the two, so it calls them separately.
+setup_global_state() {
+  setup_config_dir "${1:-}"
+  setup_modules
 }
 
 # Source a module's setup script if present.
@@ -1015,8 +1024,17 @@ is_git_url() {
   esac
 }
 
-# Clone or update a config repo. Returns the local path via stdout.
-sync_config_repo() {
+# Persist g_config_dir to state so future bare `nomadic apply` invocations
+# resolve to the same path.
+setup_config_state() {
+  mkdir -p "$NOMADIC_DIR/state"
+  printf '%s\n' "$(cd "$g_config_dir" && pwd)" >"$NOMADIC_DIR/state/config-path"
+}
+
+# Clone a config repo from a URL into $NOMADIC_DIR/config and remember the path.
+# Errors if a repo already exists at that location - to update an existing setup,
+# run `nomadic apply` without arguments.
+setup_config_repo() {
   local url="$1"
   local repo_dir="$NOMADIC_DIR/config"
 
@@ -1026,17 +1044,14 @@ sync_config_repo() {
     if [[ "$existing_url" != "$url" ]]; then
       error "Config repo at $repo_dir points to $existing_url, not $url"
     fi
-    log "Updating config repo..."
-    if ! git -C "$repo_dir" pull --ff-only >&2; then
-      error "Could not fast-forward config repo. Resolve manually: cd $repo_dir && git pull"
-    fi
-    git -C "$repo_dir" submodule update --init --recursive >&2
-  else
-    log "Cloning config repo..."
-    git clone --recurse-submodules "$url" "$repo_dir" >&2
+    error "Config repo already set up at $repo_dir. Run 'nomadic apply' (without args) to update."
   fi
 
-  echo "$repo_dir"
+  log "Cloning config repo..."
+  git clone --recurse-submodules "$url" "$repo_dir" >&2
+
+  g_config_dir="$repo_dir"
+  setup_config_state
 }
 
 # --- Apply --------------------------------------------------------------------
@@ -1070,22 +1085,32 @@ cmd_apply() {
     shift
   done
 
-  # Checkout a git URL if needed
-  if [[ -n "$config_dir" ]] && is_git_url "$config_dir"; then
-    config_dir="$(sync_config_repo "$config_dir")"
-  fi
-
-  setup_global_state $config_dir
-
-  # Pull latest if config is a git repo
-  if ((!skip_pull)) && [[ -d "$g_config_dir/.git" ]]; then
-    log "Pulling config repo..."
-    if git -C "$g_config_dir" pull --ff-only >&2; then
-      git -C "$g_config_dir" submodule update --init --recursive >&2
+  # An arg means first-time setup or override: clone (if URL) or use the given
+  # path, but don't pull. Persist the path so future bare invocations use it.
+  # Bare invocation (no arg) is normal apply mode: resolve from remembered state
+  # and pull.
+  if [[ -n "$config_dir" ]]; then
+    if is_git_url "$config_dir"; then
+      setup_config_repo "$config_dir"
     else
-      warn "Could not pull config repo, using local copy"
+      setup_config_dir "$config_dir"
+      setup_config_state
+    fi
+  else
+    setup_config_dir ""
+    # Pull latest if config is a git repo. This must happen before setup_modules
+    # so that newly-pulled modules are visible in the discovery scan.
+    if ((!skip_pull)) && [[ -d "$g_config_dir/.git" ]]; then
+      log "Pulling config repo..."
+      if git -C "$g_config_dir" pull --ff-only >&2; then
+        git -C "$g_config_dir" submodule update --init --recursive >&2
+      else
+        warn "Could not pull config repo, using local copy"
+      fi
     fi
   fi
+
+  setup_modules
 
   log "Applying config from $g_config_dir"
 
@@ -1160,10 +1185,6 @@ cmd_apply() {
     ln -s "$nomadic_self" "$nomadic_bin/nomadic"
     log "Linked nomadic -> $nomadic_bin/nomadic"
   fi
-
-  # Remember config path for next time
-  mkdir -p "$NOMADIC_DIR/state"
-  printf '%s\n' "$(cd "$g_config_dir" && pwd)" >"$NOMADIC_DIR/state/config-path"
 
   log "Shell config applied. To pick up changes: exec bash  (or restart your shell)"
 

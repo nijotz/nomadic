@@ -29,38 +29,38 @@ teardown() {
   rm -rf "$TEST_DIR"
 }
 
-@test "sync_config_repo: clones repo to NOMADIC_DIR/config" {
-  local result
-  result="$(sync_config_repo "$REMOTE_REPO")"
+@test "setup_config_repo: clones repo to NOMADIC_DIR/config" {
+  setup_config_repo "$REMOTE_REPO"
 
-  [ "$result" = "$NOMADIC_DIR/config" ]
+  [ "$g_config_dir" = "$NOMADIC_DIR/config" ]
   [ -d "$NOMADIC_DIR/config/.git" ]
   [ -f "$NOMADIC_DIR/config/modules/test/bash" ]
 }
 
-@test "sync_config_repo: pulls updates on second run" {
-  sync_config_repo "$REMOTE_REPO" >/dev/null
+@test "setup_config_repo: persists path to state file" {
+  setup_config_repo "$REMOTE_REPO"
 
-  # Push a new commit to the remote
-  printf 'export NEW="yes"\n' >"$WORK_DIR/modules/test/bash2"
-  git -C "$WORK_DIR" add -A
-  git -C "$WORK_DIR" commit -m "add bash2" 2>/dev/null
-  git -C "$WORK_DIR" push 2>/dev/null
-
-  sync_config_repo "$REMOTE_REPO" >/dev/null
-
-  [ -f "$NOMADIC_DIR/config/modules/test/bash2" ]
+  [ -f "$NOMADIC_DIR/state/config-path" ]
+  [ "$(cat "$NOMADIC_DIR/state/config-path")" = "$NOMADIC_DIR/config" ]
 }
 
-@test "sync_config_repo: errors if remote URL differs" {
-  sync_config_repo "$REMOTE_REPO" >/dev/null
+@test "setup_config_repo: errors if repo already exists with same URL" {
+  setup_config_repo "$REMOTE_REPO"
 
-  run sync_config_repo "/some/other/repo"
+  run setup_config_repo "$REMOTE_REPO"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"already set up"* ]]
+}
+
+@test "setup_config_repo: errors if remote URL differs" {
+  setup_config_repo "$REMOTE_REPO"
+
+  run setup_config_repo "/some/other/repo"
   [ "$status" -ne 0 ]
   [[ "$output" == *"points to"* ]]
 }
 
-@test "sync_config_repo: clones with submodules" {
+@test "setup_config_repo: clones with submodules" {
   # Create a repo to use as a submodule
   SUB_REPO="$TEST_DIR/sub.git"
   git init --bare "$SUB_REPO" 2>/dev/null
@@ -76,41 +76,7 @@ teardown() {
   git -C "$WORK_DIR" commit -m "add submodule" 2>/dev/null
   git -C "$WORK_DIR" push 2>/dev/null
 
-  sync_config_repo "$REMOTE_REPO" >/dev/null
+  setup_config_repo "$REMOTE_REPO"
 
   [ -f "$NOMADIC_DIR/config/modules/sub/data.txt" ]
-}
-
-@test "sync_config_repo: updates submodules on pull" {
-  # Create a submodule repo
-  SUB_REPO="$TEST_DIR/sub.git"
-  git init --bare "$SUB_REPO" 2>/dev/null
-  SUB_WORK="$TEST_DIR/sub-work"
-  git clone "$SUB_REPO" "$SUB_WORK" 2>/dev/null
-  printf 'v1\n' >"$SUB_WORK/data.txt"
-  git -C "$SUB_WORK" add -A
-  git -C "$SUB_WORK" commit -m "sub v1" 2>/dev/null
-  git -C "$SUB_WORK" push 2>/dev/null
-
-  # Add submodule and clone
-  git -C "$WORK_DIR" submodule add "$SUB_REPO" modules/sub 2>/dev/null
-  git -C "$WORK_DIR" commit -m "add submodule" 2>/dev/null
-  git -C "$WORK_DIR" push 2>/dev/null
-  sync_config_repo "$REMOTE_REPO" >/dev/null
-
-  # Update the submodule
-  printf 'v2\n' >"$SUB_WORK/data.txt"
-  git -C "$SUB_WORK" add -A
-  git -C "$SUB_WORK" commit -m "sub v2" 2>/dev/null
-  git -C "$SUB_WORK" push 2>/dev/null
-
-  # Update the main repo to point to new submodule commit
-  git -C "$WORK_DIR" submodule update --remote 2>/dev/null
-  git -C "$WORK_DIR" add -A
-  git -C "$WORK_DIR" commit -m "bump submodule" 2>/dev/null
-  git -C "$WORK_DIR" push 2>/dev/null
-
-  sync_config_repo "$REMOTE_REPO" >/dev/null
-
-  [ "$(cat "$NOMADIC_DIR/config/modules/sub/data.txt")" = "v2" ]
 }
