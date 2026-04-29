@@ -30,14 +30,14 @@ run_shell() {
 }
 
 @test "integration: init, apply, env var active in new shell" {
-  # Use a fresh path so init can create the directory structure
+  # Use a fresh path so init can scaffold there
   TEST_BINDLE="$TEST_DIR/fresh-config"
-  run_nomadic init "$TEST_BINDLE"
+  run_nomadic -B "$TEST_BINDLE" init
 
   # Add a test variable to one of the init-created modules
   printf 'export NOMADIC_TEST_VAR="hello"\n' >>"$TEST_BINDLE/modules/path/bash"
 
-  run_nomadic apply -P "$TEST_BINDLE"
+  run_nomadic apply -P
 
   # Verify a new shell sees the variable
   result="$(run_shell 'echo $NOMADIC_TEST_VAR')"
@@ -50,7 +50,7 @@ run_shell() {
   printf 'export BETA="two"\n' >"$TEST_BINDLE/modules/beta/bash"
   printf 'alpha\nbeta\n' >"$TEST_BINDLE/profiles/default"
 
-  run_nomadic apply -P "$TEST_BINDLE"
+  run_nomadic -B "$TEST_BINDLE" apply -P
 
   result="$(run_shell 'echo ${ALPHA}-${BETA}')"
   [ "$result" = "one-two" ]
@@ -63,7 +63,7 @@ run_shell() {
   printf 'export DOTS="yes"\n' >"$TEST_BINDLE/modules/dotfiles/bash"
   printf 'dotfiles\n' >"$TEST_BINDLE/profiles/default"
 
-  run_nomadic apply -P "$TEST_BINDLE"
+  run_nomadic -B "$TEST_BINDLE" apply -P
 
   # Symlink exists
   [ -L "$HOME/.myrc" ]
@@ -80,7 +80,7 @@ run_shell() {
   printf 'export APP="${BASE}:app"\n' >"$TEST_BINDLE/modules/app/bash"
   printf 'base\napp\n' >"$TEST_BINDLE/profiles/default"
 
-  run_nomadic apply -P "$TEST_BINDLE"
+  run_nomadic -B "$TEST_BINDLE" apply -P
 
   result="$(run_shell 'echo $APP')"
   [ "$result" = "loaded:app" ]
@@ -118,14 +118,13 @@ run_shell() {
   git -C "$bindle_work" commit -m "add nvim submodule" 2>/dev/null
   git -C "$bindle_work" push 2>/dev/null
 
-  # Apply via git URL - this is where the bug was: submodule checkout
-  # output got mixed into the config path
+  # Clone via git URL - submodule checkout used to leak output into the path
   run env HOME="$HOME" NOMADIC_HOME="$NOMADIC_DIR" \
     GIT_CONFIG_COUNT=3 \
     GIT_CONFIG_KEY_0=protocol.file.allow GIT_CONFIG_VALUE_0=always \
     GIT_CONFIG_KEY_1=user.email GIT_CONFIG_VALUE_1=test@test.com \
     GIT_CONFIG_KEY_2=user.name GIT_CONFIG_VALUE_2=Test \
-    "$NOMADIC_ROOT/nomadic" apply --no-packages "file://$bindle_remote"
+    "$NOMADIC_ROOT/nomadic" init "file://$bindle_remote"
   [ "$status" -eq 0 ]
   [ -f "$NOMADIC_DIR/bindle/modules/nvim/init.lua" ]
 }
@@ -140,7 +139,7 @@ run_shell() {
   # reference that crashed when _mod_pkg was set but empty-ish.
   # --no-packages skips bulk install; we just need the script to not crash.
   run env HOME="$HOME" NOMADIC_HOME="$NOMADIC_DIR" \
-    "$NOMADIC_ROOT/nomadic" apply --no-packages "$TEST_BINDLE"
+    "$NOMADIC_ROOT/nomadic" -B "$TEST_BINDLE" apply --no-packages
   [ "$status" -eq 0 ]
   [[ "$output" != *"unbound variable"* ]]
 }

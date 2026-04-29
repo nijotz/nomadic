@@ -11,6 +11,8 @@ setup() {
   ORIG_HOME="$HOME"
   HOME="$TEST_DIR/home"
   mkdir -p "$HOME"
+  # Direct cmd_apply at the test bindle (would normally come from -B or state)
+  g_bindle_dir="$TEST_BINDLE"
   # Stub out package manager so tests don't hit the real one
   detect_pkg_manager() { return 1; }
   export -f detect_pkg_manager
@@ -28,7 +30,7 @@ teardown() {
   create_module "beta"
   printf 'export BETA="yes"\n' >"$TEST_BINDLE/modules/beta/bash"
 
-  cmd_apply "$TEST_BINDLE"
+  cmd_apply
 
   [ -f "$NOMADIC_DIR/rc.bash" ]
   grep -q 'export ALPHA="yes"' "$NOMADIC_DIR/rc.bash"
@@ -41,7 +43,7 @@ teardown() {
   echo "dotfile content" >"$TEST_BINDLE/modules/mymod/myrc"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
 
-  cmd_apply "$TEST_BINDLE"
+  cmd_apply
 
   [ -L "$HOME/.myrc" ]
   [ "$(readlink "$HOME/.myrc")" = "$TEST_BINDLE/modules/mymod/myrc" ]
@@ -51,7 +53,7 @@ teardown() {
   create_module "mymod"
   printf 'touch "%s/setup_ran"\n' "$TEST_DIR" >"$TEST_BINDLE/modules/mymod/setup"
 
-  cmd_apply "$TEST_BINDLE"
+  cmd_apply
 
   [ -f "$TEST_DIR/setup_ran" ]
 }
@@ -62,7 +64,7 @@ teardown() {
   create_module "wrong-os" "os: fakeos"
   printf 'export WRONG="yes"\n' >"$TEST_BINDLE/modules/wrong-os/bash"
 
-  cmd_apply "$TEST_BINDLE"
+  cmd_apply
 
   [ -f "$NOMADIC_DIR/rc.bash" ]
   grep -q 'export UNI="yes"' "$NOMADIC_DIR/rc.bash"
@@ -77,7 +79,7 @@ teardown() {
   create_module "third" "after: second"
   printf 'export THIRD="yes"\n' >"$TEST_BINDLE/modules/third/bash"
 
-  cmd_apply "$TEST_BINDLE"
+  cmd_apply
 
   # Check that FIRST appears before SECOND, and SECOND before THIRD
   first_line="$(grep -n 'FIRST' "$NOMADIC_DIR/rc.bash" | head -1 | cut -d: -f1)"
@@ -91,7 +93,7 @@ teardown() {
   create_module "mymod"
   printf 'export FOO="bar"\n' >"$TEST_BINDLE/modules/mymod/bash"
 
-  cmd_apply "$TEST_BINDLE"
+  cmd_apply
 
   [ -f "$HOME/.bashrc" ]
   grep -q 'NOMADIC_MANAGED' "$HOME/.bashrc"
@@ -102,7 +104,7 @@ teardown() {
   printf 'export FOO="bar"\n' >"$TEST_BINDLE/modules/mymod/bash"
 
   run env HOME="$HOME" NOMADIC_DIR="$NOMADIC_DIR" \
-    "$NOMADIC_ROOT/nomadic" apply -P "$TEST_BINDLE"
+    "$NOMADIC_ROOT/nomadic" -B "$TEST_BINDLE" apply -P
   [ "$status" -eq 0 ]
   [[ "$output" != *"unbound variable"* ]]
 }
@@ -117,7 +119,7 @@ teardown() {
   create_module "mymod"
   printf 'export FOO="bar"\n' >"$TEST_BINDLE/modules/mymod/bash"
 
-  run cmd_apply --bogus "$TEST_BINDLE"
+  run cmd_apply --bogus
   [ "$status" -ne 0 ]
   [[ "$output" == *"Unknown option: --bogus"* ]]
 }
@@ -126,7 +128,7 @@ teardown() {
   create_module "mymod"
   printf 'export FOO="bar"\n' >"$TEST_BINDLE/modules/mymod/bash"
 
-  run cmd_apply -x "$TEST_BINDLE"
+  run cmd_apply -x
   [ "$status" -ne 0 ]
   [[ "$output" == *"Unknown option: -x"* ]]
 }
@@ -135,24 +137,15 @@ teardown() {
   create_module "mymod"
   printf 'export FOO="bar"\n' >"$TEST_BINDLE/modules/mymod/bash"
 
-  cmd_apply -fPL "$TEST_BINDLE"
+  cmd_apply -fPL
 
   [ -f "$NOMADIC_DIR/rc.bash" ]
   grep -q 'export FOO="bar"' "$NOMADIC_DIR/rc.bash"
 }
 
 @test "apply: combined flags reject unknown flag" {
-  run cmd_apply -fPx "$TEST_BINDLE"
+  run cmd_apply -fPx
   [ "$status" -ne 0 ]
   [[ "$output" == *"Unknown option: -x"* ]]
 }
 
-@test "apply: remembers config path" {
-  create_module "mymod"
-  printf 'export FOO="bar"\n' >"$TEST_BINDLE/modules/mymod/bash"
-
-  cmd_apply "$TEST_BINDLE"
-
-  [ -f "$NOMADIC_DIR/state/bindle-path" ]
-  grep -q "$TEST_BINDLE" "$NOMADIC_DIR/state/bindle-path"
-}

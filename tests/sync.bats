@@ -6,6 +6,9 @@ setup() {
   NOMADIC_DIR="$TEST_DIR/nomadic"
   mkdir -p "$NOMADIC_DIR"
 
+  # setup_bindle_repo clones into g_bindle_dir; mirror what cmd_init does.
+  g_bindle_dir="$NOMADIC_DIR/bindle"
+
   # Allow local file:// transport for submodule tests
   export GIT_CONFIG_COUNT=1
   export GIT_CONFIG_KEY_0=protocol.file.allow
@@ -29,35 +32,19 @@ teardown() {
   rm -rf "$TEST_DIR"
 }
 
-@test "setup_bindle_repo: clones repo to NOMADIC_DIR/config" {
+@test "setup_bindle_repo: clones into g_bindle_dir" {
   setup_bindle_repo "$REMOTE_REPO"
 
-  [ "$g_bindle_dir" = "$NOMADIC_DIR/bindle" ]
   [ -d "$NOMADIC_DIR/bindle/.git" ]
   [ -f "$NOMADIC_DIR/bindle/modules/test/bash" ]
 }
 
-@test "setup_bindle_repo: persists path to state file" {
-  setup_bindle_repo "$REMOTE_REPO"
-
-  [ -f "$NOMADIC_DIR/state/bindle-path" ]
-  [ "$(cat "$NOMADIC_DIR/state/bindle-path")" = "$NOMADIC_DIR/bindle" ]
-}
-
-@test "setup_bindle_repo: errors if repo already exists with same URL" {
+@test "setup_bindle_repo: errors if a bindle already exists at target" {
   setup_bindle_repo "$REMOTE_REPO"
 
   run setup_bindle_repo "$REMOTE_REPO"
   [ "$status" -ne 0 ]
   [[ "$output" == *"already set up"* ]]
-}
-
-@test "setup_bindle_repo: errors if remote URL differs" {
-  setup_bindle_repo "$REMOTE_REPO"
-
-  run setup_bindle_repo "/some/other/repo"
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"points to"* ]]
 }
 
 @test "setup_bindle_repo: clones with submodules" {

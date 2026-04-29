@@ -98,15 +98,17 @@ teardown() {
   [[ "$output" == *"behind remote"* ]]
 }
 
-@test "cmd_status: reports clean config" {
-  run cmd_status "$BINDLE_DIR"
+@test "cmd_status: reports clean bindle" {
+  g_bindle_dir="$BINDLE_DIR"
+  run cmd_status
   [ "$status" -eq 0 ]
   [[ "$output" == *"clean"* ]]
 }
 
-@test "cmd_status: reports dirty config" {
+@test "cmd_status: reports dirty bindle" {
   printf 'modified\n' >"$BINDLE_DIR/modules/test/bash"
-  run cmd_status "$BINDLE_DIR"
+  g_bindle_dir="$BINDLE_DIR"
+  run cmd_status
   [ "$status" -eq 0 ]
   [[ "$output" == *"uncommitted changes"* ]]
 }

@@ -194,7 +194,7 @@ filter_by_os() {
   for ((i = 0; i < ${#g_module_name[@]}; i++)); do
     local mod_os="${g_module_os[$i]}"
 
-    # No OS constraint - passes on any OS
+    # No OS constraint, passes on any OS
     if [[ -z "$mod_os" ]]; then
       new_name+=("${g_module_name[$i]}")
       new_after+=("${g_module_after[$i]}")
@@ -238,13 +238,28 @@ filter_by_os() {
   g_module_os=("${new_os[@]+"${new_os[@]}"}")
 }
 
-# Set g_bindle_dir from the given arg, or resolve it from remembered state.
+# Set g_bindle_dir if not already set (such as by -B). Falls back to remembered
+# state, or $NOMADIC_DIR/bindle as default.
 setup_bindle_dir() {
-  if [[ -z "${1:-}" ]]; then
-    g_bindle_dir="$(resolve_bindle_dir)"
+  [[ -n "$g_bindle_dir" ]] && return 0
+  local remembered="$NOMADIC_DIR/state/bindle-path"
+  if [[ -f "$remembered" ]]; then
+    g_bindle_dir="$(cat "$remembered")"
   else
-    g_bindle_dir="$1"
+    g_bindle_dir="$NOMADIC_DIR/bindle"
   fi
+}
+
+# True if g_bindle_dir points to a valid bindle (has a modules/ directory).
+is_valid_bindle() {
+  [[ -d "$g_bindle_dir/modules" ]]
+}
+
+# Errors if g_bindle_dir doesn't point to a valid bindle. Used by apply/status/
+# doctor where a configured bindle is required.
+require_valid_bindle() {
+  is_valid_bindle \
+    || error "No bindle found at $g_bindle_dir. Run 'nomadic init' to scaffold one, or 'nomadic init <url>' to clone an existing one."
 }
 
 # Detect the current OS and load module data filtered by OS.
@@ -256,17 +271,17 @@ setup_modules() {
 }
 
 # Convenience wrapper for callers that don't need to interleave work between
-# resolving the bindle dir and loading modules (e.g. doctor). cmd_apply needs
-# to pull the repo between the two, so it calls them separately.
+# resolving the bindle dir and loading modules. cmd_apply needs to pull the
+# repo between the two, so it calls them separately.
 setup_global_state() {
-  setup_bindle_dir "${1:-}"
+  setup_bindle_dir
   setup_modules
 }
 
 # Source a module's setup script if present.
 # Setup scripts run in the current shell so they can modify the environment
 # (e.g., install homebrew and update PATH).
-run_setup() {
+run_module_setup() {
   local mod="$1"
   local setup_file="$g_bindle_dir/modules/$mod/setup"
 
@@ -376,8 +391,8 @@ collect_shell_rc() {
 # Topological sort using Kahn's algorithm (breadth first).
 #
 # Reads from the global arrays populated by load_modules:
-#   g_module_name[]    - module names
-#   g_module_after[]  - each module's "after:" dependencies
+#   g_module_name[]  - module names
+#   g_module_after[] - each module's "after:" dependencies
 #
 # Outputs module names in dependency order. Modules with no ordering
 # constraint between them are sorted alphabetically for determinism.
@@ -571,7 +586,7 @@ HOOK
 }
 
 # Add a source line to the user's shell rc file.
-# Idempotent - checks for # NOMADIC_MANAGED marker before adding.
+# Idempotent, checks for NOMADIC_MANAGED marker before adding.
 infect_rc() {
   local shell="$1"
   local rc_file
@@ -588,7 +603,7 @@ infect_rc() {
   local source_line="source $NOMADIC_DIR/rc.$shell  # NOMADIC_MANAGED"
 
   for rc_file in "${rc_files[@]}"; do
-    # Already infected - skip
+    # Already infected, skip
     if [[ -f "$rc_file" ]] && grep -q '# NOMADIC_MANAGED' "$rc_file"; then
       continue
     fi
@@ -881,8 +896,8 @@ install_all_packages() {
 
 # --- Init ---------------------------------------------------------------------
 
-cmd_init() {
-  local target="${1:-$NOMADIC_DIR/bindle}"
+scaffold_bindle() {
+  local target="$1"
 
   if [[ -d "$target/modules" ]]; then
     error "Bindle already exists at $target/modules"
@@ -1002,9 +1017,6 @@ nomadic apply
 See `nomadic help` for all commands.
 README
 
-  g_bindle_dir="$target"
-  setup_bindle_state
-
   log "Created bindle at $target with modules: path, color, aliases, prompt, git"
   log ""
   log "What's inside:"
@@ -1014,8 +1026,34 @@ README
   log "  modules/prompt    - prompt with git branch"
   log "  modules/git       - gitconfig (linked to ~/.gitconfig)"
   log "  packages/         - base package list"
-  log ""
-  log "To apply:  nomadic apply"
+}
+
+cmd_init() {
+  local arg="${1:-}"
+  local has_override=0
+  [[ -n "$g_bindle_dir" ]] && has_override=1
+
+  if [[ -z "$arg" ]]; then
+    # Scaffold
+    setup_bindle_dir
+    scaffold_bindle "$g_bindle_dir"
+  elif is_git_url "$arg"; then
+    # Clone git URL
+    setup_bindle_dir
+    setup_bindle_repo "$arg"
+  else
+    # Register existing local bindle
+    if ((has_override)); then
+      error "-B and a positional path both specify where the bindle is located"
+    fi
+    g_bindle_dir="$arg"
+    log "Registered bindle at $g_bindle_dir"
+  fi
+
+  require_valid_bindle
+  setup_bindle_state
+
+  log "To apply: nomadic apply"
 }
 
 # --- Bindle -------------------------------------------------------------------
@@ -1035,27 +1073,17 @@ setup_bindle_state() {
   printf '%s\n' "$(cd "$g_bindle_dir" && pwd)" >"$NOMADIC_DIR/state/bindle-path"
 }
 
-# Clone a bindle from a URL into $NOMADIC_DIR/bindle and remember the path.
-# Errors if a bindle already exists at that location - to update an existing
-# setup, run `nomadic apply` without arguments.
+# Clone a bindle from a URL into the bindle dir. Errors if a bindle already
+# exists at that location.
 setup_bindle_repo() {
   local url="$1"
-  local repo_dir="$NOMADIC_DIR/bindle"
 
-  if [[ -d "$repo_dir/.git" ]]; then
-    local existing_url
-    existing_url="$(git -C "$repo_dir" remote get-url origin 2>/dev/null || true)"
-    if [[ "$existing_url" != "$url" ]]; then
-      error "Bindle at $repo_dir points to $existing_url, not $url"
-    fi
-    error "Bindle already set up at $repo_dir. Run 'nomadic apply' (without args) to update."
+  if is_valid_bindle; then
+    error "Bindle already set up at $g_bindle_dir. Run 'nomadic apply' to update."
   fi
 
-  log "Cloning bindle..."
-  git clone --recurse-submodules "$url" "$repo_dir" >&2
-
-  g_bindle_dir="$repo_dir"
-  setup_bindle_state
+  log "Cloning bindle into $g_bindle_dir..."
+  git clone --recurse-submodules "$url" "$g_bindle_dir" >&2
 }
 
 # --- Apply --------------------------------------------------------------------
@@ -1064,7 +1092,6 @@ cmd_apply() {
   local skip_packages=0
   local force_links=0
   local skip_pull=0
-  local bindle_arg=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -1084,33 +1111,22 @@ cmd_apply() {
           esac
         done
         ;;
-      *) bindle_arg="$1" ;;
+      *) error "Unknown argument: $1 (apply takes no positional args; pass -B <dir> to override the bindle dir, or 'nomadic init' to set one up)" ;;
     esac
     shift
   done
 
-  # An arg means first-time setup or override: clone (if URL) or use the given
-  # path, but don't pull. Persist the path so future bare invocations use it.
-  # Bare invocation (no arg) is normal apply mode: resolve from remembered state
-  # and pull.
-  if [[ -n "$bindle_arg" ]]; then
-    if is_git_url "$bindle_arg"; then
-      setup_bindle_repo "$bindle_arg"
+  setup_bindle_dir
+  require_valid_bindle
+
+  # Pull latest if bindle is a git repo. This must happen before setup_modules
+  # so that newly-pulled modules are visible in the discovery scan.
+  if ((!skip_pull)) && [[ -d "$g_bindle_dir/.git" ]]; then
+    log "Pulling bindle..."
+    if git -C "$g_bindle_dir" pull --ff-only >&2; then
+      git -C "$g_bindle_dir" submodule update --init --recursive >&2
     else
-      setup_bindle_dir "$bindle_arg"
-      setup_bindle_state
-    fi
-  else
-    setup_bindle_dir ""
-    # Pull latest if bindle is a git repo. This must happen before setup_modules
-    # so that newly-pulled modules are visible in the discovery scan.
-    if ((!skip_pull)) && [[ -d "$g_bindle_dir/.git" ]]; then
-      log "Pulling bindle..."
-      if git -C "$g_bindle_dir" pull --ff-only >&2; then
-        git -C "$g_bindle_dir" submodule update --init --recursive >&2
-      else
-        warn "Could not pull bindle, using local copy"
-      fi
+      warn "Could not pull bindle, using local copy"
     fi
   fi
 
@@ -1149,7 +1165,7 @@ cmd_apply() {
       install_module_packages "$g_bindle_dir" "$mod"
     fi
 
-    run_setup "$mod"
+    run_module_setup "$mod"
     process_links "$mod" "$force_links"
 
     ((has_bash)) && collect_shell_rc "$mod" "bash" >>"$rc_bash"
@@ -1257,16 +1273,6 @@ check_bindle_drift() {
   return $drift
 }
 
-# Resolve the bindle directory from remembered state or default.
-resolve_bindle_dir() {
-  local remembered="$NOMADIC_DIR/state/bindle-path"
-  if [[ -f "$remembered" ]]; then
-    cat "$remembered"
-  else
-    echo "$NOMADIC_DIR/bindle"
-  fi
-}
-
 NOMADIC_REPO="nijotz/nomadic"
 
 cmd_update() {
@@ -1307,11 +1313,12 @@ cmd_update() {
 }
 
 cmd_status() {
-  local g_bindle_dir="${1:-$(resolve_bindle_dir)}"
-
-  if [[ ! -d "$g_bindle_dir" ]]; then
-    error "Bindle not found: $g_bindle_dir"
+  if [[ $# -gt 0 ]]; then
+    error "Unknown argument: $1 (status takes no positional args; pass -B <dir> to override the bindle dir)"
   fi
+
+  setup_bindle_dir
+  require_valid_bindle
 
   log "Checking bindle: $g_bindle_dir"
 
@@ -1435,16 +1442,16 @@ check_pkg_manager() {
 }
 
 cmd_doctor() {
+  if [[ $# -gt 0 ]]; then
+    error "Unknown argument: $1 (doctor takes no positional args; pass -B <dir> to override the bindle dir)"
+  fi
+
   local issues=0
 
-  setup_global_state "${1:-}"
+  setup_bindle_dir
+  require_valid_bindle
+  setup_modules
 
-  if [[ ! -d "$g_bindle_dir" ]]; then
-    error "Bindle not found: $g_bindle_dir"
-  fi
-  if [[ ! -d "$g_bindle_dir/modules" ]]; then
-    error "No modules directory at $g_bindle_dir/modules"
-  fi
   log "Bindle: $g_bindle_dir"
 
   check_deps || ((issues += 1))
@@ -1468,18 +1475,22 @@ usage() {
   cat <<'USAGE'
 nomadic - portable shell environment manager
 
-Usage: nomadic <command> [args]
+Usage: nomadic [-B <dir>] <command> [args]
+
+Top-level flags:
+  -B <dir>             Use <dir> as the bindle (overrides remembered path; ephemeral)
 
 Commands:
-  init [path]          Scaffold a new bindle (default: ~/.nomadic/bindle/)
-  apply [path|url] [-L] [-P] [-f]  Apply bindle: resolve deps, install packages, link files
-                         Accepts a local path or git URL (clones to ~/.nomadic/bindle/)
-                         -L, --no-pull      Local bindle only; skip pulling
+  init                 Scaffold a new bindle at the configured location
+  init <path>          Register an existing local bindle
+  init <url>           Clone a bindle from a git URL
+  apply [-L] [-P] [-f] Apply the bindle: resolve deps, install packages, link files
+                         -L, --no-pull      Skip pulling the bindle if it's a git repo
                          -P, --no-packages  Skip bulk package install
                          -f, --force        Overwrite existing files when linking (backs up originals)
-  status [path]        Check bindle for uncommitted changes, unpushed/behind remote
+  status               Check bindle for uncommitted changes, unpushed/behind remote
   update               Update nomadic to the latest version from GitHub
-  doctor [path]        Validate bindle, check symlinks, deps, and drift
+  doctor               Validate bindle, check symlinks, deps, and drift
   help                 Show this help
   version              Show version
 
@@ -1493,6 +1504,18 @@ version() {
 # --- Main ---------------------------------------------------------------------
 
 main() {
+  # Pre-parse top-level flags before the subcommand. Sets g_bindle_dir directly.
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -B)
+        [[ -z "${2:-}" ]] && error "-B requires a directory argument"
+        g_bindle_dir="$2"
+        shift 2
+        ;;
+      *) break ;;
+    esac
+  done
+
   local cmd="${1:-}"
   shift || true
 

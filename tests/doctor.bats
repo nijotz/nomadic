@@ -9,6 +9,8 @@ setup() {
   HOME="$TEST_DIR/home"
   mkdir -p "$HOME"
   mkdir -p "$TEST_BINDLE/modules"
+  # Direct doctor at the test bindle (would normally come from -B or state)
+  g_bindle_dir="$TEST_BINDLE"
 }
 
 teardown() {
@@ -21,14 +23,14 @@ teardown() {
 @test "check_deps: passes with valid deps" {
   create_module "alpha"
   create_module "beta" "after: alpha"
-  setup_global_state "$TEST_BINDLE"
+  setup_global_state
   run check_deps
   [ "$status" -eq 0 ]
 }
 
 @test "check_deps: warns on unknown after: target" {
   create_module "mymod" "after: nonexistent"
-  setup_global_state "$TEST_BINDLE"
+  setup_global_state
   run check_deps
   [ "$status" -eq 1 ]
   [[ "$output" == *"unknown module 'nonexistent'"* ]]
@@ -37,7 +39,7 @@ teardown() {
 @test "check_deps: warns on dependency cycle" {
   create_module "alpha" "after: beta"
   create_module "beta" "after: alpha"
-  setup_global_state "$TEST_BINDLE"
+  setup_global_state
   run check_deps
   [ "$status" -eq 1 ]
   [[ "$output" == *"cycle"* ]]
@@ -50,7 +52,7 @@ teardown() {
   echo "content" >"$TEST_BINDLE/modules/mymod/myrc"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
   ln -s "$TEST_BINDLE/modules/mymod/myrc" "$HOME/.myrc"
-  setup_global_state "$TEST_BINDLE"
+  setup_global_state
   run check_links
   [ "$status" -eq 0 ]
 }
@@ -59,7 +61,7 @@ teardown() {
   create_module "mymod"
   echo "content" >"$TEST_BINDLE/modules/mymod/myrc"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
-  setup_global_state "$TEST_BINDLE"
+  setup_global_state
   run check_links
   [ "$status" -eq 1 ]
   [[ "$output" == *"missing"* ]]
@@ -70,7 +72,7 @@ teardown() {
   echo "content" >"$TEST_BINDLE/modules/mymod/myrc"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
   echo "not a symlink" >"$HOME/.myrc"
-  setup_global_state "$TEST_BINDLE"
+  setup_global_state
   run check_links
   [ "$status" -eq 1 ]
   [[ "$output" == *"not a symlink"* ]]
@@ -81,7 +83,7 @@ teardown() {
   echo "content" >"$TEST_BINDLE/modules/mymod/myrc"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
   ln -s "/wrong/target" "$HOME/.myrc"
-  setup_global_state "$TEST_BINDLE"
+  setup_global_state
   run check_links
   [ "$status" -eq 1 ]
   [[ "$output" == *"points to"* ]]
@@ -89,7 +91,7 @@ teardown() {
 
 @test "check_links: passes with no links files" {
   create_module "mymod"
-  setup_global_state "$TEST_BINDLE"
+  setup_global_state
   run check_links
   [ "$status" -eq 0 ]
 }
@@ -164,7 +166,7 @@ STUB
   detect_pkg_manager() { echo "apt"; }
   export -f detect_pkg_manager
 
-  run cmd_doctor "$TEST_BINDLE"
+  run cmd_doctor
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"Everything looks good"* ]]
@@ -175,7 +177,7 @@ STUB
 @test "cmd_doctor: reports issues" {
   create_module "mymod" "after: nonexistent"
   printf 'myrc %s/.myrc\n' "$HOME" >"$TEST_BINDLE/modules/mymod/links"
-  run cmd_doctor "$TEST_BINDLE"
+  run cmd_doctor
   [ "$status" -eq 1 ]
   [[ "$output" == *"issue(s) found"* ]]
 }
